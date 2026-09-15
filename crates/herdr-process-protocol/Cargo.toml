@@ -1,0 +1,9 @@
+[package]
+name = "herdr-process-protocol"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+herdr-process-domain = { path = "../herdr-process-domain" }
+serde.workspace = true
+serde_json.workspace = true
