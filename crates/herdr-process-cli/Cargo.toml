@@ -1,0 +1,17 @@
+[package]
+name = "herdr-process-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+herdr-process-domain = { path = "../herdr-process-domain" }
+herdr-process-application = { path = "../herdr-process-application" }
+herdr-process-protocol = { path = "../herdr-process-protocol" }
+herdr-process-adapters = { path = "../herdr-process-adapters" }
+anyhow.workspace = true
+libc.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "herdr-process"
+path = "src/main.rs"
