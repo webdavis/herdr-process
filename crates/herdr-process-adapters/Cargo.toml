@@ -1,0 +1,16 @@
+[package]
+name = "herdr-process-adapters"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+herdr-process-domain = { path = "../herdr-process-domain" }
+herdr-process-application = { path = "../herdr-process-application" }
+herdr-process-protocol = { path = "../herdr-process-protocol" }
+anyhow.workspace = true
+libc.workspace = true
+portable-pty.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+vt100.workspace = true
