@@ -42,9 +42,6 @@ pub(super) fn parse(
             for label in labels(value)? {
                 // Navigate mode has its own native registry.
                 if field.starts_with("navigate_") {
-                    if !label.trim().is_empty() {
-                        keys::encode(label)?;
-                    }
                     continue;
                 }
                 if label.contains("1..9") {
@@ -107,8 +104,15 @@ pub(super) fn parse(
                     !own || prefixed.is_some(),
                     "owned shortcut must use prefix+"
                 );
-                let bytes = keys::encode(prefixed.unwrap_or(label))
-                    .with_context(|| format!("key {label:?}"))?;
+                let chord = prefixed.unwrap_or(label);
+                let encoded = if own {
+                    Some(keys::encode(chord).with_context(|| format!("key {label:?}"))?)
+                } else {
+                    encode_foreign_chord(chord)
+                };
+                let Some(bytes) = encoded else {
+                    continue;
+                };
                 ensure!(
                     registered
                         .insert((prefixed.is_some(), bytes.clone()), label.to_string())
@@ -157,13 +161,23 @@ pub(super) fn resolve_action(
     Ok((profile.to_string(), action.parse()?))
 }
 
+/// A chord the legacy encoder cannot represent is one Herdr's own legacy encoder cannot represent
+/// either, so Herdr binds it through its native (CSI-u) path, whose byte sequences no legacy chord
+/// encoding equals. Such a chord cannot collide with this plugin's prefix-mode byte matching, so it
+/// is not a conflict. Only a chord this plugin owns must still fail loudly.
+fn encode_foreign_chord(chord: &str) -> Option<Vec<u8>> {
+    keys::encode(chord).ok()
+}
+
 fn register(label: &str, registered: &mut BTreeMap<(bool, Vec<u8>), String>) -> Result<()> {
     let label = label.trim();
     if label.is_empty() {
         return Ok(());
     }
     let prefixed = label.strip_prefix("prefix+");
-    let bytes = keys::encode(prefixed.unwrap_or(label))?;
+    let Some(bytes) = encode_foreign_chord(prefixed.unwrap_or(label)) else {
+        return Ok(());
+    };
     ensure!(
         registered
             .insert((prefixed.is_some(), bytes), label.to_string())

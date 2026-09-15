@@ -206,3 +206,5 @@ fn forty_profiles_invoke_all_four_native_manifest_actions_from_focused_input() {
 }
 
 mod validation;
+
+mod chords;
