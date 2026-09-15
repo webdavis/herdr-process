@@ -63,7 +63,7 @@ fn finish(call: &mut HostCall) -> Result<HostReply, HostFailure> {
     call.bound(HANG_BOUND);
     let start = Instant::now();
     loop {
-        assert!(start.elapsed() < HANG_BOUND * 2, "host call stalled");
+        assert!(start.elapsed() < HANG_BOUND, "host call stalled");
         let tick = Instant::now();
         let result = call.poll();
         assert!(tick.elapsed() < POLL_BOUND, "poll blocked");
