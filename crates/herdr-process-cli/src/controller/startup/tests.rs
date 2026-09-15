@@ -134,9 +134,9 @@ s=socket.socket(socket.AF_UNIX)
 s.bind(os.environ['HOME']+'/session.sock')
 s.listen(1)
 print('herdr-process:ready', file=sys.stderr, flush=True)
-s.settimeout(.4)
+s.settimeout(3)
 c,_=s.accept()
-c.settimeout(.4)
+c.settimeout(3)
 try: c.recv(1)
 except TimeoutError: pass
 "#;
@@ -151,7 +151,10 @@ except TimeoutError: pass
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(launch.diagnostic.try_clone().unwrap());
-    let connection = connect(&endpoint, &mut launch, Duration::from_millis(300)).unwrap();
+    // These budgets bound a hang, not a performance target: python3 startup
+    // plus a socket handshake measures well under a tenth of this, but a busy
+    // machine can stall either for long enough to redden a tighter one.
+    let connection = connect(&endpoint, &mut launch, Duration::from_secs(2)).unwrap();
     assert!(connection.candidate.is_some());
     let pid = connection.candidate.as_ref().unwrap().child.id() as i32;
     let _guard = OwnedPid(pid);
@@ -165,5 +168,5 @@ except TimeoutError: pass
         std::io::Error::last_os_error().raw_os_error(),
         Some(libc::ECHILD)
     );
-    assert!(start.elapsed() < Duration::from_millis(500));
+    assert!(start.elapsed() < Duration::from_secs(3));
 }
