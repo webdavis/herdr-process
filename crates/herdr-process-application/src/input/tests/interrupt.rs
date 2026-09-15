@@ -54,20 +54,31 @@ fn rejects_interrupt_prefix_and_chord_ambiguity() {
 }
 
 #[test]
-fn escape_modified_interrupt_and_unknown_sequences_remain_bytes() {
-    for bytes in [b"\x1b\x03".as_slice(), b"\x1b[20\x03", b"\x02\x03"] {
+fn ctrl_c_interrupts_unless_pending_holds_the_real_prefix_byte() {
+    let cases: [(&[u8], Vec<Effect>); 3] = [
+        (
+            b"\x1b\x03".as_slice(),
+            vec![Effect::Forward(vec![27]), Effect::Interrupt],
+        ),
+        (
+            b"\x1b[20\x03",
+            vec![Effect::Forward(b"\x1b[20".to_vec()), Effect::Interrupt],
+        ),
+        (b"\x02\x03", vec![Effect::Forward(vec![2, 3])]),
+    ];
+    for (bytes, expected) in cases {
         for split in 0..=bytes.len() {
             let mut r = router();
             let mut effects = r.feed(&bytes[..split], Duration::ZERO);
             effects.extend(r.feed(&bytes[split..], Duration::ZERO));
-            let mut forwarded = Vec::new();
+            let mut joined = Vec::new();
             for effect in effects {
                 match effect {
-                    Effect::Forward(bytes) => forwarded.extend(bytes),
-                    other => panic!("unknown input produced {other:?}"),
+                    Effect::Forward(bytes) => forward(&mut joined, &bytes),
+                    other => joined.push(other),
                 }
             }
-            assert_eq!(forwarded, bytes);
+            assert_eq!(joined, expected, "bytes {bytes:?} split {split}");
         }
     }
 }

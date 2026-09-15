@@ -43,10 +43,10 @@ impl InputRouter {
             match self.paste.push(byte) {
                 PasteInput::Hold => {}
                 PasteInput::Keys(keys) => {
-                    if keys == [3] && self.pending.is_empty() {
-                        effects.push(Effect::Interrupt);
-                    } else {
-                        for key in keys {
+                    for key in keys {
+                        if key == 3 && self.pending.is_empty() {
+                            effects.push(Effect::Interrupt);
+                        } else {
                             self.route(key, &mut effects);
                         }
                     }
