@@ -1,0 +1,7 @@
+[package]
+name = "herdr-process-application"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+herdr-process-domain = { path = "../herdr-process-domain" }
