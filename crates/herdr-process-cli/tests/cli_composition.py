@@ -18,6 +18,29 @@ BINARY = os.path.abspath(sys.argv.pop(1))
 # absolute path must fit SUN_LEN, and the per-user temporary directory on
 # macOS already spends most of that budget (mirrors the Rust TempRoot).
 ROOT = Path('/tmp')
+# THE HANG BOUND, and the only reason any wait below carries a clock at all.
+# Every one of them has a real signal to wait for: a readiness line, a
+# protocol frame, a screen suffix, a process exit. The clock stops a hang and
+# measures nothing, so it sits far past anything contention can reach. The
+# whole suite runs in under half a second idle, and the slowest single test
+# measured over fifty runs on a fully saturated machine was a fifth of a
+# second.
+HANG_BOUND = 5
+# A QUIET WINDOW: how long the product is watched to prove it sends nothing
+# yet. This one is load bearing and stays small deliberately. Load can only
+# make the product slower, which is the direction that keeps the window
+# quiet, so a busy machine cannot turn it into a failure.
+QUIET_WINDOW = .015
+# How often a blocked read looks again. A tick, not a budget.
+TICK = .01
+# The REVIEW line. Every test here is milliseconds of work, so one past a
+# second has earned a look, and the printed reading is how it gets one.
+SPEED_REPORT = 1
+# The whole-test backstop, which bounds a hang in a wait nobody bounded
+# rather than reading a speed: wall time under a parallel runner is
+# contention and not cost. It sits above HANG_BOUND on purpose, so a hung
+# wait fails on its own assertion and says which one.
+SPEED_CEILING = 30
 
 
 class Composition(unittest.TestCase):
@@ -34,14 +57,16 @@ class Composition(unittest.TestCase):
         for child in self.children:
             if child.poll() is None:
                 child.kill()
-            child.wait(timeout=.2)
+            child.wait(timeout=HANG_BOUND)
             for pipe in [child.stdin, child.stdout, child.stderr]:
                 if pipe is not None:
                     pipe.close()
         self.resources.close()
         elapsed = time.monotonic() - self.start
         print(f'{self.id()}: {elapsed * 1000:.1f} ms', file=sys.stderr)
-        self.assertLess(elapsed, 3)
+        if elapsed > SPEED_REPORT:
+            print(f'{self.id()}: over the {SPEED_REPORT}s review line', file=sys.stderr)
+        self.assertLess(elapsed, SPEED_CEILING)
 
     def spawn(self, args, **kwargs):
         child = subprocess.Popen([BINARY, *args], env=self.env, stdin=subprocess.DEVNULL,
@@ -51,7 +76,7 @@ class Composition(unittest.TestCase):
 
     def run_cli(self, args):
         child = self.spawn(args)
-        out, err = child.communicate(timeout=.6)
+        out, err = child.communicate(timeout=HANG_BOUND)
         return child.returncode, out, err
 
     def config(self):
@@ -114,7 +139,8 @@ class Composition(unittest.TestCase):
                         HERDR_SOCKET_PATH=str(self.root / 'host.sock'), HERDR_PROCESS_STARTUP='1')
         runtime = self.root / 'runtime'
         first = self.spawn(['manager', '--runtime-dir', str(runtime)])
-        self.assertTrue(select.select([first.stderr], [], [], .25)[0], 'manager readiness missing')
+        self.assertTrue(select.select([first.stderr], [], [], HANG_BOUND)[0],
+                        'manager readiness missing')
         self.assertEqual(os.read(first.stderr.fileno(), 256), b'herdr-process:ready\n')
         code, out, err = self.run_cli(['manager', '--runtime-dir', str(runtime)])
         self.assertEqual((code, out, err), (0, b'', b'herdr-process:duplicate\n'))
@@ -126,7 +152,7 @@ class Composition(unittest.TestCase):
                         HERDR_SOCKET_PATH=str(self.root / 'host.sock'), HERDR_PROCESS_STARTUP='1')
         runtime = self.root / 'runtime'
         first = self.spawn(['manager', '--runtime-dir', str(runtime)])
-        self.assertTrue(select.select([first.stderr], [], [], .25)[0])
+        self.assertTrue(select.select([first.stderr], [], [], HANG_BOUND)[0])
         self.assertEqual(os.read(first.stderr.fileno(), 256), b'herdr-process:ready\n')
         marker = self.root / 'blocked-profiles'
         os.mkfifo(marker)
@@ -183,7 +209,7 @@ class Composition(unittest.TestCase):
         server = self.resources.enter_context(socket.socket(socket.AF_UNIX))
         server.bind(str(path))
         server.listen(1)
-        server.settimeout(.3)
+        server.settimeout(HANG_BOUND)
         master, slave = os.openpty()
         # Close the master first; an unread slave output queue must not delay teardown.
         self.resources.callback(os.close, slave)
@@ -198,7 +224,7 @@ class Composition(unittest.TestCase):
         self.children.append(child)
         connection, _ = server.accept()
         self.resources.enter_context(connection)
-        connection.settimeout(.3)
+        connection.settimeout(HANG_BOUND)
         self.assertEqual(self.receive(connection), {'type': 'attach', 'profile': 'test',
                          'ticket': 'private-ticket', 'rows': 24, 'cols': 80})
         return child, connection, master, slave, original, flags
@@ -213,11 +239,15 @@ class Composition(unittest.TestCase):
         self.assertEqual(fcntl.fcntl(slave, fcntl.F_GETFL) & restorable, flags & restorable)
 
     def read_terminal(self, master, suffix):
+        # THE SUFFIX IS THE SIGNAL. Draining a screen through a pseudoterminal
+        # takes as many round trips as the kernel buffer needs, so the only
+        # honest end of this loop is the suffix arriving; the deadline stops a
+        # hang when it never will.
         output = b''
-        deadline = time.monotonic() + .3
+        deadline = time.monotonic() + HANG_BOUND
         while suffix not in output:
             self.assertLess(time.monotonic(), deadline, repr(output[-100:]))
-            if select.select([master], [], [], .01)[0]:
+            if select.select([master], [], [], TICK)[0]:
                 output += os.read(master, 65536)
         return output
 
@@ -225,13 +255,13 @@ class Composition(unittest.TestCase):
         child, connection, master, slave, original, flags = self.attachment()
         raw = b'unfinished\x03\x1b[200~pasted\x03\x1b[201~\x1b['
         os.write(master, raw)
-        self.assertFalse(select.select([connection], [], [], .015)[0])
+        self.assertFalse(select.select([connection], [], [], QUIET_WINDOW)[0])
         screen = b'\x1b[2J\x1b[Hprivate-screen'
         self.frame(connection, {'type': 'screen', 'bytes': list(screen)})
         self.frame(connection, {'type': 'attached'})
         self.assertEqual(self.receive(connection), {'type': 'ready'})
         self.assertIn(screen, self.read_terminal(master, b'private-screen'))
-        self.assertFalse(select.select([connection], [], [], .015)[0])
+        self.assertFalse(select.select([connection], [], [], QUIET_WINDOW)[0])
         self.frame(connection, {'type': 'ack'})
         forwarded = b''
         while len(forwarded) < len(raw):
@@ -243,7 +273,7 @@ class Composition(unittest.TestCase):
         self.assertEqual(self.receive(connection), {'type': 'resize', 'rows': 35, 'cols': 101})
         self.frame(connection, {'type': 'retire'})
         self.assertEqual(self.receive(connection), {'type': 'detach'})
-        self.assertEqual(child.wait(timeout=.3), 0, child.stderr.read())
+        self.assertEqual(child.wait(timeout=HANG_BOUND), 0, child.stderr.read())
         self.assert_restored(slave, original, flags)
         self.assertIn(b'\x1b[?1049l', self.read_terminal(master, b'\x1b[?1049l'))
 
@@ -252,14 +282,14 @@ class Composition(unittest.TestCase):
         screen = b'\x1b[31m' + b'0123456789' * 3000 + b'\x1b[0mSCREEN-END'
         self.frame(connection, {'type': 'screen', 'bytes': list(screen)})
         self.frame(connection, {'type': 'attached'})
-        self.assertFalse(select.select([connection], [], [], .015)[0])
+        self.assertFalse(select.select([connection], [], [], QUIET_WINDOW)[0])
         output = self.read_terminal(master, b'SCREEN-END')
         self.assertEqual(output, b'\x1b[?1049h' + screen)
         self.assertEqual(self.receive(connection), {'type': 'ready'})
         self.frame(connection, {'type': 'ack'})
         self.frame(connection, {'type': 'retire'})
         self.assertEqual(self.receive(connection), {'type': 'detach'})
-        self.assertEqual(child.wait(timeout=.3), 0)
+        self.assertEqual(child.wait(timeout=HANG_BOUND), 0)
         self.assert_restored(slave, original, flags)
 
     def test_retire_while_terminal_blocked_restores_without_hanging(self):
@@ -268,27 +298,27 @@ class Composition(unittest.TestCase):
         self.frame(connection, {'type': 'attached'})
         self.frame(connection, {'type': 'retire'})
         self.assertEqual(self.receive(connection), {'type': 'detach'})
-        self.assertIn(child.wait(timeout=.3), [0, 1])
+        self.assertIn(child.wait(timeout=HANG_BOUND), [0, 1])
         self.assert_restored(slave, original, flags)
 
     def test_attachment_unwind_restores_terminal(self):
         child, connection, master, slave, original, flags = self.attachment()
         self.frame(connection, {'type': 'error', 'message': 'private unwind fixture'})
         expected = 101 if os.environ.get('CLI_EXPECT_PANIC') == '1' else 1
-        self.assertEqual(child.wait(timeout=.3), expected)
+        self.assertEqual(child.wait(timeout=HANG_BOUND), expected)
         self.assert_restored(slave, original, flags)
         self.assertIn(b'\x1b[?1049l', self.read_terminal(master, b'\x1b[?1049l'))
 
     def test_attachment_disconnect_restores(self):
         child, connection, master, slave, original, flags = self.attachment()
         connection.close()
-        self.assertEqual(child.wait(timeout=.3), 1)
+        self.assertEqual(child.wait(timeout=HANG_BOUND), 1)
         self.assert_restored(slave, original, flags)
 
     def test_attachment_handshake_error_preserves_message(self):
         child, connection, master, slave, original, flags = self.attachment()
         self.frame(connection, {'type': 'error', 'message': 'stale attachment ticket'})
-        self.assertEqual(child.wait(timeout=.3), 1)
+        self.assertEqual(child.wait(timeout=HANG_BOUND), 1)
         self.assertIn(b'stale attachment ticket', child.stderr.read())
         self.assert_restored(slave, original, flags)
 
