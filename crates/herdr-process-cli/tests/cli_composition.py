@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import select
+import shutil
 import socket
 import struct
 import subprocess
@@ -27,6 +28,7 @@ class Composition(unittest.TestCase):
         self.env = {'HOME': str(self.root), 'PATH': '/usr/bin:/bin', 'TMPDIR': str(self.root)}
         self.children = []
         self.resources = contextlib.ExitStack()
+        self.resources.callback(shutil.rmtree, self.root, ignore_errors=True)
 
     def tearDown(self):
         for child in self.children:
