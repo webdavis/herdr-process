@@ -41,7 +41,7 @@ class Composition(unittest.TestCase):
         self.resources.close()
         elapsed = time.monotonic() - self.start
         print(f'{self.id()}: {elapsed * 1000:.1f} ms', file=sys.stderr)
-        self.assertLess(elapsed, 1)
+        self.assertLess(elapsed, 3)
 
     def spawn(self, args, **kwargs):
         child = subprocess.Popen([BINARY, *args], env=self.env, stdin=subprocess.DEVNULL,

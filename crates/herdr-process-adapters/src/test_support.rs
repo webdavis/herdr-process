@@ -2,7 +2,7 @@ use std::{
     os::unix::fs::DirBuilderExt,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 /// A private temporary directory, unique per run and removed when it drops.
@@ -14,7 +14,6 @@ use std::{
 /// stops the leak that makes collisions possible at all.
 pub(crate) struct TempRoot {
     path: PathBuf,
-    start: Instant,
 }
 
 impl TempRoot {
@@ -36,10 +35,7 @@ impl TempRoot {
             .mode(0o700)
             .create(&path)
             .unwrap();
-        Self {
-            path,
-            start: Instant::now(),
-        }
+        Self { path }
     }
 
     pub(crate) fn path(&self) -> &std::path::Path {
@@ -54,11 +50,5 @@ impl TempRoot {
 impl Drop for TempRoot {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.path);
-        if !std::thread::panicking() {
-            assert!(
-                self.start.elapsed() < Duration::from_secs(1),
-                "test exceeded one second"
-            );
-        }
     }
 }

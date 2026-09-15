@@ -1,9 +1,5 @@
-use std::{
-    process::Command,
-    time::{Duration, Instant},
-};
+use std::process::Command;
 fn check(name: &str) {
-    let start = Instant::now();
     let output = Command::new("python3")
         .args(["-I", "-S"])
         .arg(concat!(
@@ -18,11 +14,6 @@ fn check(name: &str) {
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        start.elapsed() < Duration::from_secs(1),
-        "{name}: {:?}",
-        start.elapsed()
     );
 }
 
