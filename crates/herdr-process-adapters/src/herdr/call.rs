@@ -6,8 +6,10 @@ use std::{
     time::{Duration, Instant},
 };
 /// How long the host is given to answer before the call is refused. It is a
-/// PRODUCT decision: somebody is waiting on a pane to open.
-const DEADLINE: Duration = Duration::from_millis(500);
+/// PRODUCT decision: somebody is waiting on a pane to open. `pub(super)` so a
+/// test can assert a freshly opened call still carries this value rather than
+/// one an edit silently swapped in underneath it.
+pub(super) const DEADLINE: Duration = Duration::from_millis(500);
 const OUTPUT_LIMIT: usize = 65536;
 const READ_BUDGET: usize = 8192;
 
@@ -91,6 +93,13 @@ impl HostCall {
     #[cfg(test)]
     pub(super) fn bound(&mut self, deadline: Duration) {
         self.deadline = deadline;
+    }
+
+    /// This call's current bound. TEST-ONLY: lets a test pin the initializer
+    /// to `DEADLINE` without reading a wall clock.
+    #[cfg(test)]
+    pub(super) fn deadline(&self) -> Duration {
+        self.deadline
     }
 
     fn advance(&mut self) -> Result<Option<HostReply>, HostFailure> {

@@ -85,6 +85,12 @@ fn checks(args: &[&str]) -> String {
     script
 }
 #[test]
+fn open_call_starts_with_the_product_deadline() {
+    let _speed = Speed::start("open_call_starts_with_the_product_deadline");
+    let call = fixture(&emit(POPUP)).open(&view()).unwrap();
+    assert_eq!(call.deadline(), super::call::DEADLINE);
+}
+#[test]
 fn popup_executes_exact_public_call_and_has_no_pane() {
     let _speed = Speed::start("popup_executes_exact_public_call_and_has_no_pane");
     let script = checks(&[
