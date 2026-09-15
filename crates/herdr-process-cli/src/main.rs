@@ -3,8 +3,6 @@ mod attach;
 mod controller;
 mod environment;
 mod manager;
-#[cfg(test)]
-mod test_support;
 
 use anyhow::{Context, Result};
 use arguments::Arguments;

@@ -12,12 +12,12 @@ use std::{
 /// the second run then finds a stale socket, lock or log where it expects
 /// none. The nanosecond stamp makes the name unique and the removal on drop
 /// stops the leak that makes collisions possible at all.
-pub(crate) struct TempRoot {
+pub struct TempRoot {
     path: PathBuf,
 }
 
 impl TempRoot {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -38,12 +38,18 @@ impl TempRoot {
         Self { path }
     }
 
-    pub(crate) fn path(&self) -> &std::path::Path {
+    pub fn path(&self) -> &std::path::Path {
         &self.path
     }
 
-    pub(crate) fn join(&self, name: &str) -> PathBuf {
+    pub fn join(&self, name: &str) -> PathBuf {
         self.path.join(name)
+    }
+}
+
+impl Default for TempRoot {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

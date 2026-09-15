@@ -3,6 +3,9 @@ name = "herdr-process-adapters"
 version.workspace = true
 edition.workspace = true
 
+[features]
+test-support = []
+
 [dependencies]
 herdr-process-domain = { path = "../herdr-process-domain" }
 herdr-process-application = { path = "../herdr-process-application" }

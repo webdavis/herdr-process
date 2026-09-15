@@ -17,5 +17,5 @@ pub use herdr::{Herdr, HostCall, HostFailure, HostFailureCode, HostReply, OpenVi
 mod attachment_terminal;
 pub use attachment_terminal::AttachmentTerminal;
 
-#[cfg(test)]
-mod test_support;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;

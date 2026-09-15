@@ -12,6 +12,11 @@ anyhow.workspace = true
 libc.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+herdr-process-adapters = { path = "../herdr-process-adapters", features = [
+  "test-support",
+] }
+
 [[bin]]
 name = "herdr-process"
 path = "src/main.rs"

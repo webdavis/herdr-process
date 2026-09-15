@@ -116,7 +116,7 @@ fn stalled_ack_times_out_once_with_unknown_result() {
 #[test]
 fn composed_controller_loads_selected_configuration_and_sends_one_action() {
     let start = Instant::now();
-    let temporary = crate::test_support::TempRoot::new();
+    let temporary = herdr_process_adapters::test_support::TempRoot::new();
     let root = temporary.path().to_path_buf();
     let endpoint = Endpoint::new(&root).unwrap();
     let listener = std::os::unix::net::UnixListener::bind(endpoint.socket()).unwrap();
