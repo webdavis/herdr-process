@@ -13,7 +13,10 @@ import time
 import unittest
 
 BINARY = os.path.abspath(sys.argv.pop(1))
-ROOT = Path('/private/tmp/dotfiles-modernization')
+# Deliberately /tmp, not TMPDIR: these roots hold Unix sockets, whose
+# absolute path must fit SUN_LEN, and the per-user temporary directory on
+# macOS already spends most of that budget (mirrors the Rust TempRoot).
+ROOT = Path('/tmp')
 
 
 class Composition(unittest.TestCase):
