@@ -45,16 +45,28 @@ fn view() -> OpenView {
         split: None,
     }
 }
+/// What a double in this file is allowed before it is called hung. EVERY ONE
+/// OF THEM PRINTS ONE LINE AND EXITS, in single-digit milliseconds, so this
+/// number bounds a hang and measures nothing: no amount of load takes a shell
+/// that far, and the product's own half second stays where it belongs, in
+/// `DEADLINE`.
+const HANG_BOUND: Duration = Duration::from_secs(10);
+/// The longest ONE `poll` may take. It is not a speed reading either: a poll
+/// that blocked would park on the pipe until its double exited, which
+/// `hanging_command_times_out_without_blocking_poll` holds open for ten
+/// seconds, so a second of scheduling noise cannot reach this and a real
+/// block cannot hide under it.
+const POLL_BOUND: Duration = Duration::from_secs(1);
 fn finish(call: &mut HostCall) -> Result<HostReply, HostFailure> {
+    // THE DOUBLE'S OWN EXIT IS THE SIGNAL. The bound below only stops a hang,
+    // so nothing here waits on the product deadline the double has to beat.
+    call.bound(HANG_BOUND);
     let start = Instant::now();
     loop {
-        assert!(
-            start.elapsed() < Duration::from_secs(3),
-            "host call stalled"
-        );
+        assert!(start.elapsed() < HANG_BOUND * 2, "host call stalled");
         let tick = Instant::now();
         let result = call.poll();
-        assert!(tick.elapsed() < Duration::from_millis(100), "poll blocked");
+        assert!(tick.elapsed() < POLL_BOUND, "poll blocked");
         match result? {
             Some(reply) => return Ok(reply),
             None => std::thread::yield_now(),
@@ -260,11 +272,16 @@ fn combined_output_cap_is_enforced_at_boundary() {
 fn hanging_command_times_out_without_blocking_poll() {
     let _speed = Speed::start("hanging_command_times_out_without_blocking_poll");
     let mut call = fixture("exec /bin/sleep 10").open(&view()).unwrap();
+    // THE NON-BLOCKING HALF: the double parks for ten seconds and this answers
+    // anyway, still inside the product deadline it was spawned with.
+    let tick = Instant::now();
     assert_eq!(call.poll(), Ok(None));
-    assert_eq!(
-        finish(&mut call).unwrap_err().code,
-        HostFailureCode::Timeout
-    );
+    assert!(tick.elapsed() < POLL_BOUND, "poll blocked");
+    // AND THE REFUSAL HALF, reached by moving the bound rather than by
+    // sleeping out the product's half second: the double is still running, its
+    // deadline has passed, and the call is refused instead of waited on.
+    call.bound(Duration::ZERO);
+    assert_eq!(call.poll().unwrap_err().code, HostFailureCode::Timeout);
 }
 #[test]
 fn drop_reaps_exact_owned_child() {
@@ -319,12 +336,23 @@ impl Speed {
         }
     }
 }
+/// The REVIEW line. Every test here is milliseconds of work, so one past a
+/// second has earned a look, and the printed reading above is how it gets one.
+const SPEED_REPORT: Duration = Duration::from_secs(1);
+/// The FAILURE line, which bounds a hang rather than reading a speed. Wall
+/// time under a parallel runner is contention and not cost (the same finding
+/// pns's own `TEST_CEILING_MS` records), and a one-second hard line failed
+/// pull requests whose diff never touched this crate.
+const SPEED_CEILING: Duration = Duration::from_secs(10);
 impl Drop for Speed {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
         eprintln!("{}: {:.3} ms", self.name, elapsed.as_secs_f64() * 1000.0);
+        if elapsed > SPEED_REPORT {
+            eprintln!("{}: over the {SPEED_REPORT:?} review line", self.name);
+        }
         if !std::thread::panicking() {
-            assert!(elapsed < Duration::from_secs(1));
+            assert!(elapsed < SPEED_CEILING, "{} hung: {elapsed:?}", self.name);
         }
     }
 }
