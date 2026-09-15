@@ -5,11 +5,32 @@ use herdr_process_adapters::{
 };
 use herdr_process_protocol::Target;
 use std::{
-    collections::hash_map::DefaultHasher,
     ffi::OsString,
     hash::{Hash, Hasher},
     path::PathBuf,
 };
+
+/// FNV-1a: unlike `DefaultHasher`, whose algorithm std documents as
+/// unspecified and subject to change between releases, this keeps the
+/// runtime socket directory a function of its inputs only, never of the
+/// compiler that built it.
+struct StableHasher(u64);
+impl StableHasher {
+    fn new() -> Self {
+        Self(0xcbf29ce484222325)
+    }
+}
+impl Hasher for StableHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 ^= u64::from(byte);
+            self.0 = self.0.wrapping_mul(0x100000001b3);
+        }
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
 
 pub struct Environment {
     pub home: PathBuf,
@@ -75,7 +96,7 @@ pub fn target(get: impl Fn(&str) -> Option<OsString>) -> Result<Target> {
     })
 }
 pub fn runtime(host: &Herdr, paths: &ConfigurationPaths) -> PathBuf {
-    let mut hash = DefaultHasher::new();
+    let mut hash = StableHasher::new();
     (&host.socket, &paths.herdr, &paths.profiles).hash(&mut hash);
     // Relative selections are interpreted in the invoking directory.
     if !host.socket.is_absolute() || !paths.herdr.is_absolute() || !paths.profiles.is_absolute() {
