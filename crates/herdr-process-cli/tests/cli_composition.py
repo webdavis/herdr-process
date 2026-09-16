@@ -74,6 +74,22 @@ class Composition(unittest.TestCase):
         self.children.append(child)
         return child
 
+    def readiness_line(self, child):
+        # A pipe read returns what has ARRIVED, not what was written, so a
+        # single os.read can hand back a fragment of the readiness line under
+        # load (measured on a CI runner: b'herdr-process:'). Read until the
+        # newline, bounded by the hang bound rather than by a byte count.
+        line = b''
+        deadline = time.monotonic() + HANG_BOUND
+        while not line.endswith(b'\n'):
+            remaining = deadline - time.monotonic()
+            self.assertTrue(remaining > 0 and select.select([child.stderr], [], [], remaining)[0],
+                            'manager readiness missing, read so far: %r' % line)
+            chunk = os.read(child.stderr.fileno(), 256)
+            self.assertNotEqual(chunk, b'', 'manager closed stderr, read so far: %r' % line)
+            line += chunk
+        return line
+
     def run_cli(self, args):
         child = self.spawn(args)
         out, err = child.communicate(timeout=HANG_BOUND)
@@ -139,9 +155,7 @@ class Composition(unittest.TestCase):
                         HERDR_SOCKET_PATH=str(self.root / 'host.sock'), HERDR_PROCESS_STARTUP='1')
         runtime = self.root / 'runtime'
         first = self.spawn(['manager', '--runtime-dir', str(runtime)])
-        self.assertTrue(select.select([first.stderr], [], [], HANG_BOUND)[0],
-                        'manager readiness missing')
-        self.assertEqual(os.read(first.stderr.fileno(), 256), b'herdr-process:ready\n')
+        self.assertEqual(self.readiness_line(first), b'herdr-process:ready\n')
         code, out, err = self.run_cli(['manager', '--runtime-dir', str(runtime)])
         self.assertEqual((code, out, err), (0, b'', b'herdr-process:duplicate\n'))
         self.assertIsNone(first.poll())
@@ -152,8 +166,7 @@ class Composition(unittest.TestCase):
                         HERDR_SOCKET_PATH=str(self.root / 'host.sock'), HERDR_PROCESS_STARTUP='1')
         runtime = self.root / 'runtime'
         first = self.spawn(['manager', '--runtime-dir', str(runtime)])
-        self.assertTrue(select.select([first.stderr], [], [], HANG_BOUND)[0])
-        self.assertEqual(os.read(first.stderr.fileno(), 256), b'herdr-process:ready\n')
+        self.assertEqual(self.readiness_line(first), b'herdr-process:ready\n')
         marker = self.root / 'blocked-profiles'
         os.mkfifo(marker)
         code, out, err = self.run_cli(['manager', '--runtime-dir', str(runtime), '--profiles', str(marker)])
