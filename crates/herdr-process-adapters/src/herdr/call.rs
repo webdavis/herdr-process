@@ -1,15 +1,11 @@
 use super::reply::{Expected, HostFailure, HostFailureCode, HostReply};
+use crate::unix;
 use std::{
     io::{self, Read},
     os::fd::AsRawFd,
     process::{Child, ChildStderr, ChildStdout, Command, Stdio},
     time::{Duration, Instant},
 };
-/// How long the host is given to answer before the call is refused. It is a
-/// PRODUCT decision: somebody is waiting on a pane to open. `pub(super)` so a
-/// test can assert a freshly opened call still carries this value rather than
-/// one an edit silently swapped in underneath it.
-pub(super) const DEADLINE: Duration = Duration::from_millis(500);
 const OUTPUT_LIMIT: usize = 65536;
 const READ_BUDGET: usize = 8192;
 
@@ -20,17 +16,17 @@ pub struct HostCall {
     output: Vec<u8>,
     errors: Vec<u8>,
     started: Instant,
-    /// This call's own copy of `DEADLINE`. A TEST OWNS ITS OWN BOUND: the
-    /// suite's doubles are spawned shells, and on a loaded machine the spawn
-    /// alone can outlast the product's half second, which turned a test about
-    /// a malformed reply into a test about how fast this machine forks.
     deadline: Duration,
     expected: Expected,
     outcome: Option<Result<HostReply, HostFailure>>,
 }
 
 impl HostCall {
-    pub(super) fn spawn(mut command: Command, expected: Expected) -> Result<Self, HostFailure> {
+    pub(super) fn spawn(
+        mut command: Command,
+        expected: Expected,
+        deadline: Duration,
+    ) -> Result<Self, HostFailure> {
         let started = Instant::now();
         let child = command
             .stdin(Stdio::null())
@@ -45,7 +41,7 @@ impl HostCall {
             output: Vec::new(),
             errors: Vec::new(),
             started,
-            deadline: DEADLINE,
+            deadline,
             expected,
             outcome: None,
         };
@@ -86,20 +82,6 @@ impl HostCall {
             self.errors.clear();
         }
         result
-    }
-
-    /// Move this call's bound, so a test can wait on the signal its double
-    /// actually raises rather than race the product's deadline.
-    #[cfg(test)]
-    pub(super) fn bound(&mut self, deadline: Duration) {
-        self.deadline = deadline;
-    }
-
-    /// This call's current bound. TEST-ONLY: lets a test pin the initializer
-    /// to `DEADLINE` without reading a wall clock.
-    #[cfg(test)]
-    pub(super) fn deadline(&self) -> Duration {
-        self.deadline
     }
 
     fn advance(&mut self) -> Result<Option<HostReply>, HostFailure> {
@@ -163,20 +145,17 @@ fn read_pipe(
     let mut buffer = [0; READ_BUDGET];
     let remaining = OUTPUT_LIMIT.saturating_sub(bytes.len() + other);
     let size = buffer.len().min(remaining + 1);
-    match reader.read(&mut buffer[..size]) {
-        Ok(0) => *pipe = None,
-        Ok(count) => {
+    match unix::ready(reader.read(&mut buffer[..size]))
+        .map_err(|_| HostFailure::new(HostFailureCode::Io))?
+    {
+        Some(0) => *pipe = None,
+        Some(count) => {
             if count > remaining {
                 return Err(HostFailure::new(HostFailureCode::Oversized));
             }
             bytes.extend_from_slice(&buffer[..count]);
         }
-        Err(error)
-            if matches!(
-                error.kind(),
-                io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-            ) => {}
-        Err(_) => return Err(HostFailure::new(HostFailureCode::Io)),
+        None => {}
     }
     Ok(())
 }

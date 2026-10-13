@@ -1,5 +1,5 @@
 use super::{Command, control::Message, startup::Startup};
-use crate::Readiness;
+use crate::{Readiness, unix};
 use anyhow::{Result, bail, ensure};
 use portable_pty::PtySize;
 use std::{
@@ -68,12 +68,9 @@ impl SupervisedProcess {
         let mut output = std::mem::take(&mut self.startup.tail);
         let mut bytes = [0; 8192];
         while output.len() < 65536 {
-            match self.startup.reader.read(&mut bytes) {
-                Ok(0) => break,
-                Ok(n) => output.extend_from_slice(&bytes[..n]),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => break,
-                Err(e) => return Err(e.into()),
+            match unix::ready(self.startup.reader.read(&mut bytes))? {
+                Some(0) | None => break,
+                Some(n) => output.extend_from_slice(&bytes[..n]),
             }
         }
         Ok(output)

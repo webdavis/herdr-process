@@ -1,3 +1,4 @@
+use crate::unix;
 use std::{
     fs::File,
     io::{self, Read, Write},
@@ -51,18 +52,10 @@ impl AttachmentTerminal {
     }
     pub fn read(&mut self) -> io::Result<Option<Vec<u8>>> {
         let mut buffer = [0; 8192];
-        match self.input.read(&mut buffer) {
-            Ok(0) => Ok(None),
-            Ok(count) => Ok(Some(buffer[..count].to_vec())),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                ) =>
-            {
-                Ok(Some(Vec::new()))
-            }
-            Err(error) => Err(error),
+        match unix::ready(self.input.read(&mut buffer))? {
+            Some(0) => Ok(None),
+            Some(count) => Ok(Some(buffer[..count].to_vec())),
+            None => Ok(Some(Vec::new())),
         }
     }
     pub fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
@@ -95,20 +88,15 @@ impl AttachmentTerminal {
                     "terminal restoration output timed out",
                 ));
             }
-            match self.output.write(bytes) {
-                Ok(0) => {
+            match unix::ready(self.output.write(bytes))? {
+                Some(0) => {
                     return Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "terminal output closed",
                     ));
                 }
-                Ok(count) => bytes = &bytes[count..],
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                    ) =>
-                {
+                Some(count) => bytes = &bytes[count..],
+                None => {
                     let mut poll = libc::pollfd {
                         fd: self.output.as_raw_fd(),
                         events: libc::POLLOUT,
@@ -121,7 +109,6 @@ impl AttachmentTerminal {
                         return Err(io::Error::last_os_error());
                     }
                 }
-                Err(error) => return Err(error),
             }
         }
         Ok(())

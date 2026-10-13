@@ -1,10 +1,7 @@
 use anyhow::{Result, ensure};
 use std::{
     ffi::{CString, OsString},
-    os::unix::{
-        ffi::{OsStrExt, OsStringExt},
-        fs::MetadataExt,
-    },
+    os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
 };
 
@@ -30,11 +27,8 @@ impl Directory {
         let parent = socket
             .parent()
             .ok_or_else(|| anyhow::anyhow!("missing guardian directory"))?;
-        let metadata = std::fs::symlink_metadata(parent)?;
         ensure!(
-            metadata.is_dir()
-                && metadata.uid() == unsafe { libc::geteuid() }
-                && metadata.mode() & 0o777 == 0o700,
+            crate::unix::private_directory(parent)?,
             "guardian directory must be private and owned"
         );
         Ok(Self(parent.to_owned()))
