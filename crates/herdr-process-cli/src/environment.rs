@@ -5,22 +5,16 @@ use herdr_process_adapters::{
 };
 use herdr_process_protocol::Target;
 use std::{
-    ffi::OsString,
-    hash::{Hash, Hasher},
-    path::PathBuf,
+    ffi::{OsStr, OsString},
+    os::unix::ffi::OsStrExt,
+    path::{Path, PathBuf},
 };
 
-/// FNV-1a: unlike `DefaultHasher`, whose algorithm std documents as
-/// unspecified and subject to change between releases, this keeps the
-/// runtime socket directory a function of its inputs only, never of the
-/// compiler that built it.
-struct StableHasher(u64);
-impl StableHasher {
+struct Fnv1a(u64);
+impl Fnv1a {
     fn new() -> Self {
         Self(0xcbf29ce484222325)
     }
-}
-impl Hasher for StableHasher {
     fn write(&mut self, bytes: &[u8]) {
         for &byte in bytes {
             self.0 ^= u64::from(byte);
@@ -30,6 +24,14 @@ impl Hasher for StableHasher {
     fn finish(&self) -> u64 {
         self.0
     }
+}
+fn runtime_key(parts: &[&OsStr]) -> u64 {
+    let mut hash = Fnv1a::new();
+    for part in parts {
+        hash.write(part.as_bytes());
+        hash.write(&[0]);
+    }
+    hash.finish()
 }
 
 pub struct Environment {
@@ -96,15 +98,24 @@ pub fn target(get: impl Fn(&str) -> Option<OsString>) -> Result<Target> {
     })
 }
 pub fn runtime(host: &Herdr, paths: &ConfigurationPaths) -> PathBuf {
-    let mut hash = StableHasher::new();
-    (&host.socket, &paths.herdr, &paths.profiles).hash(&mut hash);
-    // Relative selections are interpreted in the invoking directory.
-    if !host.socket.is_absolute() || !paths.herdr.is_absolute() || !paths.profiles.is_absolute() {
-        std::env::current_dir().ok().hash(&mut hash);
-    }
-    // Reading the effective user identifier has no mutable native state.
-    let uid = unsafe { libc::geteuid() };
-    PathBuf::from(format!("/tmp/herdr-process-{uid}-{:016x}", hash.finish()))
+    let selections = [&host.socket, &paths.herdr, &paths.profiles];
+    let invoking_directory = selections
+        .iter()
+        .any(|path| path.is_relative())
+        .then(|| std::env::current_dir().unwrap_or_default());
+    let parts: Vec<&OsStr> = selections
+        .iter()
+        .map(|path| path.as_os_str())
+        .chain(invoking_directory.as_deref().map(Path::as_os_str))
+        .collect();
+    PathBuf::from(format!(
+        "/tmp/herdr-process-{}-{:016x}",
+        effective_uid(),
+        runtime_key(&parts)
+    ))
+}
+fn effective_uid() -> u32 {
+    unsafe { libc::geteuid() }
 }
 #[cfg(test)]
 mod tests;
