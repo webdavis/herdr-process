@@ -1,32 +1,34 @@
 use super::*;
-use herdr_process_adapters::test_support::TempRoot;
-use std::{fs::OpenOptions, os::unix::fs::OpenOptionsExt, time::Instant};
+use herdr_process_adapters::{Listener, test_support::TempRoot};
+mod log;
 fn fixture() -> (TempRoot, Endpoint, Launch) {
     let temporary = TempRoot::new();
     let root = temporary.path().to_path_buf();
     let endpoint = Endpoint::new(&root).unwrap();
-    let diagnostic = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(root.join("log"))
-        .unwrap();
     let mut command = Command::new("/bin/sh");
     command
         .env_clear()
         .env("HOME", &root)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(diagnostic.try_clone().unwrap());
+        .stdin(Stdio::null())
+        .stdout(Stdio::null());
     (
         temporary,
         endpoint,
         Launch {
             command,
-            diagnostic,
+            runtime: root,
         },
     )
+}
+fn listener_after_pid(root: PathBuf) -> std::thread::JoinHandle<Listener> {
+    std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_millis(180);
+        while !root.join("pid").exists() {
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        Endpoint::new(&root).unwrap().bind().unwrap().unwrap()
+    })
 }
 #[test]
 fn existing_endpoint_never_spawns_candidate() {
@@ -57,7 +59,6 @@ fn stalled_startup_kills_and_reaps_only_owned_unstarted_child() {
         .trim()
         .parse()
         .unwrap();
-    // waitpid only observes this test's exact already-reaped direct child.
     let _guard = OwnedPid(pid);
     let mut status = 0;
     assert_eq!(
@@ -78,16 +79,7 @@ fn exited_duplicate_is_reaped_while_connecting_to_winner() {
         .command
         .arg("-c")
         .arg("echo $$ > \"$HOME/pid\"; echo herdr-process:duplicate >&2");
-    // The independently held winner starts listening after the candidate exits.
-    let other_root = root.path().to_path_buf();
-    let worker = std::thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_millis(180);
-        while !other_root.join("pid").exists() {
-            assert!(Instant::now() < deadline);
-            std::thread::yield_now();
-        }
-        Endpoint::new(&other_root).unwrap().bind().unwrap().unwrap()
-    });
+    let worker = listener_after_pid(root.path().to_path_buf());
     let result = connect(&endpoint, &mut launch, Duration::from_millis(200));
     let _winner = worker.join().unwrap();
     assert!(result.is_ok());
@@ -113,7 +105,6 @@ struct OwnedPid(i32);
 impl Drop for OwnedPid {
     fn drop(&mut self) {
         let mut status = 0;
-        // A zero waitpid result proves this exact unreaped direct child still exists.
         if unsafe { libc::waitpid(self.0, &mut status, libc::WNOHANG) } == 0 {
             unsafe {
                 libc::kill(self.0, libc::SIGKILL);
@@ -148,12 +139,8 @@ except TimeoutError: pass
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("HOME", root.path())
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(launch.diagnostic.try_clone().unwrap());
-    // These budgets bound a hang, not a performance target: python3 startup
-    // plus a socket handshake measures well under a tenth of this, but a busy
-    // machine can stall either for long enough to redden a tighter one.
+        .stdin(Stdio::null())
+        .stdout(Stdio::null());
     let connection = connect(&endpoint, &mut launch, Duration::from_secs(2)).unwrap();
     assert!(connection.candidate.is_some());
     let pid = connection.candidate.as_ref().unwrap().child.id() as i32;
