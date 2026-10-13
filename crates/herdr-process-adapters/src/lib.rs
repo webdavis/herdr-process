@@ -5,6 +5,8 @@ mod transport;
 pub use transport::Peer;
 mod endpoint;
 pub use endpoint::{Endpoint, Listener};
+mod readiness;
+pub use readiness::Readiness;
 
 mod config;
 mod manifest;

@@ -1,4 +1,5 @@
 use super::ProcessSpec;
+use crate::Readiness;
 use anyhow::{Result, bail};
 use portable_pty::PtySize;
 use std::path::Path;
@@ -12,6 +13,8 @@ impl SupervisedProcess {
     pub fn pid(&self) -> u32 {
         unreachable!("unsupported platform cannot construct a process guardian")
     }
+    pub fn watch(&self, _: &mut Readiness) {}
+    pub fn watch_writable(&self, _: &mut Readiness) {}
     pub fn resize(&mut self, _: PtySize) -> Result<()> {
         bail!("process guardian requires macOS")
     }

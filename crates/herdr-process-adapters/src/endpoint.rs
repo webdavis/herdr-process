@@ -1,4 +1,4 @@
-use crate::Peer;
+use crate::{Peer, Readiness};
 use std::{
     fs::{self, File, OpenOptions},
     io,
@@ -103,6 +103,10 @@ impl Endpoint {
 }
 
 impl Listener {
+    pub fn watch(&self, readiness: &mut Readiness) {
+        readiness.readable(self.listener.as_raw_fd());
+    }
+
     pub fn accept(&self) -> io::Result<Option<Peer>> {
         match self.listener.accept() {
             Ok((stream, _)) => Peer::new(stream).map(Some),

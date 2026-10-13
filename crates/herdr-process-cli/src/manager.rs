@@ -17,6 +17,8 @@ use clients::{Client, Role};
 use sessions::Session;
 use transitions::{Command, Pending};
 
+const TICK: Duration = Duration::from_millis(10);
+
 struct Manager {
     configuration: adapters::Configuration,
     host: adapters::Herdr,
@@ -71,6 +73,25 @@ pub fn run(
         {
             return Ok(());
         }
-        std::thread::yield_now();
+        manager.wait(&listener)?;
+    }
+}
+
+impl Manager {
+    fn wait(&self, listener: &adapters::Listener) -> std::io::Result<()> {
+        let mut readiness = adapters::Readiness::default();
+        listener.watch(&mut readiness);
+        for client in self.clients.values() {
+            client.peer.watch(&mut readiness);
+        }
+        for session in self.sessions.values() {
+            session.watch(&mut readiness);
+        }
+        readiness.wait(self.timeout())
+    }
+
+    fn timeout(&self) -> Option<Duration> {
+        let timers = self.pending.is_some() || !self.clients.is_empty() || !self.queue.is_empty();
+        timers.then_some(TICK)
     }
 }
