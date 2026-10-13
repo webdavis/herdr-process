@@ -32,39 +32,39 @@ fn rejects_ambiguous_bindings_literal_prefix_and_paste_conflicts() {
         (vec![2], vec![binding(b"\x1b[200~", "a", Action::Kill)]),
     ];
     let errors = [
-        KeymapError::EmptyPrefix,
-        KeymapError::EmptyChord { binding: 0 },
-        KeymapError::AmbiguousBindings {
-            first: 0,
-            second: 1,
-        },
-        KeymapError::AmbiguousBindings {
-            first: 0,
-            second: 1,
-        },
-        KeymapError::AmbiguousBindings {
-            first: 0,
-            second: 1,
-        },
-        KeymapError::PrefixConflict { binding: 0 },
-        KeymapError::PrefixConflict { binding: 0 },
-        KeymapError::PrefixConflict { binding: 0 },
-        KeymapError::PasteConflict { binding: None },
-        KeymapError::PasteConflict { binding: Some(0) },
+        "input prefix must not be empty",
+        "binding a:kill has an empty chord",
+        "bindings a:kill and b:kill use the same or overlapping keys",
+        "bindings a:kill and b:kill use the same or overlapping keys",
+        "bindings ctrl-i:kill and tab:kill use the same or overlapping keys",
+        "binding a:kill overlaps the prefix key",
+        "binding a:kill overlaps the prefix key",
+        "binding a:kill overlaps the prefix key",
+        "input prefix conflicts with bracketed paste detection",
+        "binding a:kill conflicts with bracketed paste detection",
     ];
     for ((prefix, bindings), error) in bad.into_iter().zip(errors) {
-        assert_eq!(Keymap::new(prefix, bindings).err(), Some(error));
+        assert_eq!(
+            Keymap::new(prefix, bindings)
+                .map_err(|e| e.to_string())
+                .err(),
+            Some(error.to_string())
+        );
     }
 }
 
 #[test]
 fn rejects_interrupt_prefix_and_chord_ambiguity() {
     assert_eq!(
-        Keymap::new(vec![3], vec![]).err(),
-        Some(KeymapError::InterruptConflict { binding: None })
+        Keymap::new(vec![3], vec![])
+            .map_err(|e| e.to_string())
+            .err(),
+        Some("input prefix conflicts with ordinary Ctrl+C interrupt".to_string())
     );
     assert_eq!(
-        Keymap::new(vec![2], vec![binding(b"\x03", "a", Action::Kill)]).err(),
-        Some(KeymapError::InterruptConflict { binding: Some(0) })
+        Keymap::new(vec![2], vec![binding(b"\x03", "a", Action::Kill)])
+            .map_err(|e| e.to_string())
+            .err(),
+        Some("binding a:kill conflicts with ordinary Ctrl+C interrupt".to_string())
     );
 }

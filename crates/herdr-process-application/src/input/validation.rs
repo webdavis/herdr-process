@@ -4,40 +4,48 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeymapError {
     EmptyPrefix,
-    InterruptConflict { binding: Option<usize> },
-    EmptyChord { binding: usize },
-    PrefixConflict { binding: usize },
-    AmbiguousBindings { first: usize, second: usize },
-    PasteConflict { binding: Option<usize> },
+    InterruptConflict { binding: Option<Binding> },
+    EmptyChord { binding: Binding },
+    PrefixConflict { binding: Binding },
+    AmbiguousBindings { first: Binding, second: Binding },
+    PasteConflict { binding: Option<Binding> },
 }
 impl fmt::Display for KeymapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InterruptConflict { binding } => write!(
-                f,
-                "prefix or binding {binding:?} conflicts with ordinary Ctrl+C interrupt"
-            ),
             Self::EmptyPrefix => f.write_str("input prefix must not be empty"),
-            Self::EmptyChord { binding } => write!(f, "binding {binding} has an empty chord"),
-            Self::PrefixConflict { binding } => write!(
-                f,
-                "binding {binding} conflicts with the literal prefix escape"
-            ),
+            Self::EmptyChord { binding } => {
+                write!(f, "binding {} has an empty chord", name(binding))
+            }
+            Self::PrefixConflict { binding } => {
+                write!(f, "binding {} overlaps the prefix key", name(binding))
+            }
             Self::AmbiguousBindings { first, second } => write!(
                 f,
-                "bindings {first} and {second} have duplicate or ambiguous byte encodings"
+                "bindings {} and {} use the same or overlapping keys",
+                name(first),
+                name(second)
             ),
-            Self::PasteConflict {
-                binding: Some(binding),
-            } => write!(
+            Self::InterruptConflict { binding } => write!(
                 f,
-                "binding {binding} conflicts with bracketed paste detection"
+                "{} conflicts with ordinary Ctrl+C interrupt",
+                subject(binding)
             ),
-            Self::PasteConflict { binding: None } => {
-                f.write_str("input prefix conflicts with bracketed paste detection")
-            }
+            Self::PasteConflict { binding } => write!(
+                f,
+                "{} conflicts with bracketed paste detection",
+                subject(binding)
+            ),
         }
     }
+}
+fn name(binding: &Binding) -> String {
+    format!("{}:{}", binding.profile, binding.action)
+}
+fn subject(binding: &Option<Binding>) -> String {
+    binding
+        .as_ref()
+        .map_or("input prefix".into(), |b| format!("binding {}", name(b)))
 }
 impl std::error::Error for KeymapError {}
 fn overlaps(a: &[u8], b: &[u8]) -> bool {
@@ -58,28 +66,33 @@ pub(super) fn validate(prefix: &[u8], bindings: &[Binding]) -> Result<(), Keymap
     }
     for (index, binding) in bindings.iter().enumerate() {
         if binding.chord.is_empty() {
-            return Err(KeymapError::EmptyChord { binding: index });
+            return Err(KeymapError::EmptyChord {
+                binding: binding.clone(),
+            });
         }
         if binding.chord.contains(&3) {
             return Err(KeymapError::InterruptConflict {
-                binding: Some(index),
+                binding: Some(binding.clone()),
             });
         }
         if overlaps(prefix, &binding.chord) {
-            return Err(KeymapError::PrefixConflict { binding: index });
+            return Err(KeymapError::PrefixConflict {
+                binding: binding.clone(),
+            });
         }
         if paste_conflict(&binding.chord) {
             return Err(KeymapError::PasteConflict {
-                binding: Some(index),
+                binding: Some(binding.clone()),
             });
         }
-        for (previous, other) in bindings[..index].iter().enumerate() {
-            if overlaps(&binding.chord, &other.chord) {
-                return Err(KeymapError::AmbiguousBindings {
-                    first: previous,
-                    second: index,
-                });
-            }
+        if let Some(other) = bindings[..index]
+            .iter()
+            .find(|other| overlaps(&binding.chord, &other.chord))
+        {
+            return Err(KeymapError::AmbiguousBindings {
+                first: other.clone(),
+                second: binding.clone(),
+            });
         }
     }
     Ok(())
