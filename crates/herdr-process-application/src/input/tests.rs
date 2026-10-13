@@ -1,4 +1,5 @@
 use super::*;
+use herdr_process_domain::Binding;
 fn binding(chord: &[u8], profile: &str, action: Action) -> Binding {
     Binding {
         chord: chord.to_vec(),
@@ -8,14 +9,15 @@ fn binding(chord: &[u8], profile: &str, action: Action) -> Binding {
 }
 fn router() -> InputRouter {
     InputRouter::new(
-        vec![2],
-        vec![
-            binding(b"R", "review", Action::SplitRight),
-            binding(b"\x1b[A", "shell", Action::SplitBelow),
-        ],
-        Duration::from_millis(100),
+        &Keymap::new(
+            vec![2],
+            vec![
+                binding(b"R", "review", Action::SplitRight),
+                binding(b"\x1b[A", "shell", Action::SplitBelow),
+            ],
+        )
+        .unwrap(),
     )
-    .unwrap()
 }
 #[test]
 fn split_reads_route_only_configured_chords_and_preserve_effect_order() {
@@ -100,92 +102,17 @@ fn paste_is_opaque_across_every_split_and_timeout_in_delimiters() {
 }
 
 #[test]
-fn rejects_ambiguous_bindings_literal_prefix_and_paste_conflicts() {
-    let bad = [
-        (vec![], vec![]),
-        (vec![2], vec![binding(b"", "a", Action::Kill)]),
-        (
-            vec![2],
-            vec![
-                binding(b"r", "a", Action::Kill),
-                binding(b"r", "b", Action::Kill),
-            ],
-        ),
-        (
-            vec![2],
-            vec![
-                binding(b"r", "a", Action::Kill),
-                binding(b"rr", "b", Action::Kill),
-            ],
-        ),
-        (
-            vec![2],
-            vec![
-                binding(b"\t", "ctrl-i", Action::Kill),
-                binding(b"\t", "tab", Action::Kill),
-            ],
-        ),
-        (vec![2], vec![binding(b"\x02", "a", Action::Kill)]),
-        (b"ab".to_vec(), vec![binding(b"a", "a", Action::Kill)]),
-        (b"ab".to_vec(), vec![binding(b"abc", "a", Action::Kill)]),
-        (b"\x1b".to_vec(), vec![]),
-        (vec![2], vec![binding(b"\x1b[200~", "a", Action::Kill)]),
-    ];
-    let errors = [
-        RouterError::EmptyPrefix,
-        RouterError::EmptyChord { binding: 0 },
-        RouterError::AmbiguousBindings {
-            first: 0,
-            second: 1,
-        },
-        RouterError::AmbiguousBindings {
-            first: 0,
-            second: 1,
-        },
-        RouterError::AmbiguousBindings {
-            first: 0,
-            second: 1,
-        },
-        RouterError::PrefixConflict { binding: 0 },
-        RouterError::PrefixConflict { binding: 0 },
-        RouterError::PrefixConflict { binding: 0 },
-        RouterError::PasteConflict { binding: None },
-        RouterError::PasteConflict { binding: Some(0) },
-    ];
-    for ((prefix, bindings), error) in bad.into_iter().zip(errors) {
-        assert_eq!(
-            InputRouter::new(prefix, bindings, Duration::from_millis(100)).err(),
-            Some(error)
-        );
-    }
-    assert_eq!(
-        InputRouter::new(vec![2], vec![], Duration::ZERO).err(),
-        Some(RouterError::ZeroTimeout)
-    );
-}
-
-#[test]
 fn shared_mapping_routes_all_actions_and_more_than_thirty_two_profiles() {
     let bindings: Vec<_> = (0..80)
         .map(|i| {
             binding(
                 format!("{i:03}").as_bytes(),
                 &format!("profile-{i}"),
-                [
-                    Action::SplitRight,
-                    Action::SplitBelow,
-                    Action::ToggleFloat,
-                    Action::Kill,
-                ][i % 4],
+                Action::ALL[i % 4],
             )
         })
         .collect();
-    let mut r = InputRouter::new(
-        b"\x1bx".to_vec(),
-        bindings.clone(),
-        Duration::from_millis(100),
-    )
-    .unwrap();
+    let mut r = InputRouter::new(&Keymap::new(b"\x1bx".to_vec(), bindings.clone()).unwrap());
     for binding in bindings {
         let mut effects = Vec::new();
         for byte in b"\x1bx".iter().chain(&binding.chord) {
@@ -240,6 +167,7 @@ fn empty_reads_and_backward_clock_do_not_flush_or_extend_deadline() {
 }
 
 mod interrupt;
+mod keymap;
 
 #[test]
 fn bracketed_paste_is_forwarded_whole_without_routing_pasted_shortcuts() {

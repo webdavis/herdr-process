@@ -59,9 +59,12 @@ fn selected_configuration_activates_only_its_generated_manifest() {
     std::fs::write(&unrelated, "invalid unselected config").unwrap();
     std::fs::write(&destination, "previous manifest").unwrap();
     let c = Configuration::load(&profiles, &selected, &home).unwrap();
-    assert_eq!(c.prefix(), &[4]);
-    assert_eq!(c.profiles()["job"].args, ["a \"quoted\" arg", r"c:\path"]);
-    assert_eq!(c.profiles()["job"].cwd, home.join("work"));
+    assert_eq!(c.keymap().prefix(), &[4]);
+    assert_eq!(
+        c.profiles()["job"].command.args,
+        ["a \"quoted\" arg", r"c:\path"]
+    );
+    assert_eq!(c.profiles()["job"].command.cwd, home.join("work"));
     c.write_manifest(files.path()).unwrap();
     assert_eq!(
         std::fs::read_to_string(&destination).unwrap(),
@@ -90,12 +93,7 @@ fn selected_configuration_activates_only_its_generated_manifest() {
         native,
         ("job".into(), herdr_process_domain::Action::SplitRight)
     );
-    let mut router = herdr_process_application::InputRouter::new(
-        changed.prefix().to_vec(),
-        changed.bindings().to_vec(),
-        std::time::Duration::from_millis(100),
-    )
-    .unwrap();
+    let mut router = herdr_process_application::InputRouter::new(changed.keymap());
     assert_eq!(
         router.feed(b"\x05T", std::time::Duration::ZERO),
         vec![herdr_process_application::Effect::Invoke {

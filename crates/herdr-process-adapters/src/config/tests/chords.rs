@@ -19,7 +19,7 @@ fn foreign_chords_the_legacy_encoder_cannot_represent_are_skipped() {
     ] {
         let configuration = parse(&format!("{HERDR}{foreign}{OWNED}"))
             .unwrap_or_else(|error| panic!("rejected {foreign}: {error:#}"));
-        assert_eq!(configuration.bindings().len(), 1, "{foreign}");
+        assert_eq!(configuration.keymap().bindings().len(), 1, "{foreign}");
     }
 }
 

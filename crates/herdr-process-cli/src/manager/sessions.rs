@@ -1,5 +1,5 @@
 use super::*;
-use adapters::{ProcessSpec, PtySize, SupervisedProcess, Terminal};
+use adapters::{PtySize, SupervisedProcess, Terminal};
 pub(super) struct Session {
     pub process: SupervisedProcess,
     pub terminal: Terminal,
@@ -8,16 +8,8 @@ pub(super) struct Session {
     input: VecDeque<u8>,
 }
 impl Session {
-    pub fn spawn(binary: &std::path::Path, profile: &adapters::Profile) -> anyhow::Result<Self> {
-        let process = SupervisedProcess::spawn(
-            binary,
-            &ProcessSpec {
-                program: profile.program.clone(),
-                args: profile.args.clone(),
-                cwd: profile.cwd.clone(),
-            },
-            size(24, 80),
-        )?;
+    pub fn spawn(binary: &std::path::Path, profile: &Profile) -> anyhow::Result<Self> {
+        let process = SupervisedProcess::spawn(binary, &profile.command, size(24, 80))?;
         Ok(Self {
             process,
             terminal: Terminal::new(24, 80),
@@ -30,16 +22,8 @@ impl Session {
         })
     }
     pub fn context_for(&self, target: &Target) -> Target {
-        if let Some((
-            _,
-            Placement::Docked {
-                target: anchor,
-                pane,
-                ..
-            },
-        )) = &self.view
-            && target.workspace == anchor.workspace
-            && target.pane == *pane
+        if let Some((_, view)) = &self.view
+            && let Some(anchor) = view.docked_at(target)
         {
             return anchor.clone();
         }

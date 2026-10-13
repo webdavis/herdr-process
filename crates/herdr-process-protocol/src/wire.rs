@@ -1,3 +1,4 @@
+use herdr_process_domain::{Action, Target};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -5,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum Request {
     Action {
         profile: String,
-        action: String,
+        action: Action,
         configuration: String,
         target: Target,
     },
@@ -24,13 +25,6 @@ pub enum Request {
     },
     Ready {},
     Detach {},
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Target {
-    pub workspace: String,
-    pub pane: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

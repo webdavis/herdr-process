@@ -1,10 +1,20 @@
+use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Action {
     SplitRight,
     SplitBelow,
     ToggleFloat,
     Kill,
+}
+impl Action {
+    pub const ALL: [Action; 4] = [
+        Self::SplitRight,
+        Self::SplitBelow,
+        Self::ToggleFloat,
+        Self::Kill,
+    ];
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseActionError(pub String);

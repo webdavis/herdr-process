@@ -81,7 +81,7 @@ impl Manager {
                 profile: pending.command.profile.clone(),
                 ticket: pending.ticket.clone(),
                 manager_socket: self.socket.clone(),
-                cwd: profile.cwd.clone(),
+                cwd: profile.command.cwd.clone(),
                 width: profile.width,
                 height: profile.height,
                 split,

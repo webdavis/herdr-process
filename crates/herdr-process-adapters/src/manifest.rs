@@ -43,12 +43,7 @@ impl Configuration {
     pub fn render_manifest(&self) -> Result<String> {
         let mut actions = Vec::new();
         for profile in self.profiles().keys() {
-            for action in [
-                Action::SplitRight,
-                Action::SplitBelow,
-                Action::ToggleFloat,
-                Action::Kill,
-            ] {
+            for action in Action::ALL {
                 actions.push(Entry {
                     id: format!("{profile}:{action}"),
                     title: format!("{profile}: {action}"),

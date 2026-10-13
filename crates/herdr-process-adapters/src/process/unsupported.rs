@@ -1,4 +1,4 @@
-use super::ProcessSpec;
+use super::Command;
 use crate::Readiness;
 use anyhow::{Result, bail};
 use portable_pty::PtySize;
@@ -7,7 +7,7 @@ pub struct SupervisedProcess {
     _private: (),
 }
 impl SupervisedProcess {
-    pub fn spawn(_: &Path, _: &ProcessSpec, _: PtySize) -> Result<Self> {
+    pub fn spawn(_: &Path, _: &Command, _: PtySize) -> Result<Self> {
         bail!("process guardian requires macOS")
     }
     pub fn pid(&self) -> u32 {

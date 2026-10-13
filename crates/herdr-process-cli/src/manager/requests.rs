@@ -28,7 +28,6 @@ impl Manager {
                     configuration == self.configuration.identity(),
                     "configuration changed; retry with the current configuration"
                 );
-                let action = action.parse()?;
                 anyhow::ensure!(
                     self.configuration.profiles().contains_key(&profile),
                     "unknown profile"
@@ -39,10 +38,7 @@ impl Manager {
                     reply: Some(id),
                     profile,
                     action,
-                    target: Target {
-                        workspace: target.workspace,
-                        pane: target.pane,
-                    },
+                    target,
                 }));
             }
             Request::Attach {

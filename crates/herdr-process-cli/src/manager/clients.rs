@@ -16,21 +16,14 @@ pub(super) struct Client {
     pub failed: bool,
 }
 impl Client {
-    pub fn new(
-        peer: adapters::Peer,
-        configuration: &adapters::Configuration,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn new(peer: adapters::Peer, configuration: &adapters::Configuration) -> Self {
+        Self {
             peer,
-            router: InputRouter::new(
-                configuration.prefix().to_vec(),
-                configuration.bindings().to_vec(),
-                Duration::from_millis(100),
-            )?,
+            router: InputRouter::new(configuration.keymap()),
             role: Role::Fresh,
             screen: None,
             failed: false,
-        })
+        }
     }
     pub fn send(&mut self, response: Response) {
         if self.peer.send(&response).is_err() {

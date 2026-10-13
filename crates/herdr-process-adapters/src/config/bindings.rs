@@ -1,13 +1,10 @@
-use super::{Profile, keys};
+use super::keys;
 use anyhow::{Context, Result, ensure};
-use herdr_process_application::InputRouter;
-use herdr_process_domain::{Action, Binding};
-use std::{collections::BTreeMap, time::Duration};
+use herdr_process_application::Keymap;
+use herdr_process_domain::{Action, Binding, Profile};
+use std::collections::BTreeMap;
 
-pub(super) fn parse(
-    text: &str,
-    profiles: &BTreeMap<String, Profile>,
-) -> Result<(Vec<u8>, Vec<Binding>)> {
+pub(super) fn parse(text: &str, profiles: &BTreeMap<String, Profile>) -> Result<Keymap> {
     let root: toml::Value = toml::from_str(text)?;
     let table = root
         .get("keys")
@@ -129,8 +126,7 @@ pub(super) fn parse(
             }
         }
     }
-    InputRouter::new(prefix.clone(), bindings.clone(), Duration::from_millis(100))?;
-    Ok((prefix, bindings))
+    Ok(Keymap::new(prefix, bindings)?)
 }
 fn labels(value: &toml::Value) -> Result<Vec<&str>> {
     if let Some(label) = value.as_str() {

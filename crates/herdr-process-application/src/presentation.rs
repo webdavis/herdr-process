@@ -22,14 +22,15 @@ pub fn view_intent(action: Action, current: Option<&Placement>, target: &Target)
         Action::SplitRight => Direction::Right,
         Action::SplitBelow => Direction::Below,
     };
-    if let Some(Placement::Docked {
-        target: anchor,
-        direction: existing,
-        pane,
-    }) = current
+    if let Some(
+        placement @ Placement::Docked {
+            target: anchor,
+            direction: existing,
+            ..
+        },
+    ) = current
         && *existing == direction
-        && anchor.workspace == target.workspace
-        && (anchor.pane == target.pane || *pane == target.pane)
+        && (anchor == target || placement.docked_at(target).is_some())
     {
         return ViewIntent::Focus;
     }

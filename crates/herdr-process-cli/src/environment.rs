@@ -3,7 +3,7 @@ use anyhow::{Context, Result, ensure};
 use herdr_process_adapters::{
     Configuration, ConfigurationPaths, Herdr, resolve_configuration_paths,
 };
-use herdr_process_protocol::Target;
+use herdr_process_domain::Target;
 use std::{
     ffi::{OsStr, OsString},
     os::unix::ffi::OsStrExt,

@@ -1,4 +1,4 @@
-use super::{ProcessSpec, control::Message, startup::Startup};
+use super::{Command, control::Message, startup::Startup};
 use crate::Readiness;
 use anyhow::{Result, bail, ensure};
 use portable_pty::PtySize;
@@ -21,7 +21,7 @@ enum State {
     Failed(String),
 }
 impl SupervisedProcess {
-    pub fn spawn(supervisor_binary: &Path, spec: &ProcessSpec, size: PtySize) -> Result<Self> {
+    pub fn spawn(supervisor_binary: &Path, spec: &Command, size: PtySize) -> Result<Self> {
         let mut startup = Startup::create(supervisor_binary, size)?;
         let pid = startup.start(spec)?;
         Ok(Self {

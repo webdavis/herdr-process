@@ -112,7 +112,7 @@ fn command_schema_and_native_whitespace_are_not_silently_ignored() {
         Path::new("/private/home"),
     )
     .unwrap();
-    assert_eq!(c.bindings().len(), 1);
+    assert_eq!(c.keymap().bindings().len(), 1);
     for text in [
         command.replace("type='plugin_action'", "type='typo'"),
         command.replace("key='prefix+R'", "key=[1]"),
@@ -132,4 +132,16 @@ fn command_schema_and_native_whitespace_are_not_silently_ignored() {
             "accepted {text}"
         );
     }
+}
+
+#[test]
+fn overlapping_owned_keys_name_both_bindings() {
+    let herdr = format!(
+        "{HERDR}[[keys.command]]\nkey='prefix+alt+O'\ntype='plugin_action'\ncommand='herdr-process.editor:kill'\n[[keys.command]]\nkey='prefix+f1'\ntype='plugin_action'\ncommand='herdr-process.editor:split-below'\n"
+    );
+    let error = Configuration::parse(PROFILES, &herdr, Path::new("/private/home")).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "bindings editor:kill and editor:split-below use the same or overlapping keys"
+    );
 }
