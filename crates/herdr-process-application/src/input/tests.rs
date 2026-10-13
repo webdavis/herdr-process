@@ -171,12 +171,7 @@ fn shared_mapping_routes_all_actions_and_more_than_thirty_two_profiles() {
             binding(
                 format!("{i:03}").as_bytes(),
                 &format!("profile-{i}"),
-                [
-                    Action::SplitRight,
-                    Action::SplitBelow,
-                    Action::ToggleFloat,
-                    Action::Kill,
-                ][i % 4],
+                Action::ALL[i % 4],
             )
         })
         .collect();

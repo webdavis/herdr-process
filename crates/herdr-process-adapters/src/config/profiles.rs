@@ -1,5 +1,5 @@
-use super::{CtrlC, Profile};
 use anyhow::{Result, ensure};
+use herdr_process_domain::{Command, CtrlC, Profile};
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
@@ -86,9 +86,11 @@ impl RawProfile {
             "profile {name}: cwd must be absolute or start with ~/"
         );
         Ok(Profile {
-            program: self.program,
-            args: self.args,
-            cwd,
+            command: Command {
+                program: self.program,
+                args: self.args,
+                cwd,
+            },
             width: self.width.value()?,
             height: self.height.value()?,
             ctrl_c: self.ctrl_c,

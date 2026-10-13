@@ -85,12 +85,7 @@ impl Manager {
                     .as_ref()
                     .is_some_and(|v| v.1 == Placement::Floating) =>
             {
-                let action =
-                    if self.configuration.profiles()[&profile].ctrl_c == adapters::CtrlC::Hide {
-                        Action::ToggleFloat
-                    } else {
-                        Action::Kill
-                    };
+                let action = self.configuration.profiles()[&profile].ctrl_c.action();
                 self.execute(Command {
                     reply: None,
                     profile,

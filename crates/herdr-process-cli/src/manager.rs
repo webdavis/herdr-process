@@ -1,6 +1,6 @@
 use herdr_process_adapters as adapters;
 use herdr_process_application::{Effect, InputRouter, ViewIntent, view_intent};
-use herdr_process_domain::{Action, Placement, Target};
+use herdr_process_domain::{Action, Placement, Profile, Target};
 use herdr_process_protocol::{Request, Response};
 use std::{
     collections::{BTreeMap, VecDeque},

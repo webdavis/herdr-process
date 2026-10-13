@@ -1,4 +1,6 @@
 use super::*;
+use herdr_process_domain::{Command, CtrlC};
+use std::path::PathBuf;
 const PROFILES: &str = r#"[windows.editor]
 program = "editor"
 args = ['a "quoted" value', 'c:\work\file', '']
@@ -14,13 +16,15 @@ fn profiles_preserve_arguments_and_resolve_home() {
     assert_eq!(
         c.profiles()["editor"],
         Profile {
-            program: "editor".into(),
-            args: vec![
-                "a \"quoted\" value".into(),
-                r"c:\work\file".into(),
-                "".into()
-            ],
-            cwd: PathBuf::from("/private/home/projects"),
+            command: Command {
+                program: "editor".into(),
+                args: vec![
+                    "a \"quoted\" value".into(),
+                    r"c:\work\file".into(),
+                    "".into()
+                ],
+                cwd: PathBuf::from("/private/home/projects"),
+            },
             width: 80,
             height: 65,
             ctrl_c: CtrlC::Hide

@@ -1,11 +1,4 @@
-use std::path::PathBuf;
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct ProcessSpec {
-    pub program: String,
-    pub args: Vec<String>,
-    pub cwd: PathBuf,
-}
+use herdr_process_domain::Command;
 
 #[cfg(target_os = "macos")]
 #[path = "process/control.rs"]

@@ -60,8 +60,11 @@ fn selected_configuration_activates_only_its_generated_manifest() {
     std::fs::write(&destination, "previous manifest").unwrap();
     let c = Configuration::load(&profiles, &selected, &home).unwrap();
     assert_eq!(c.prefix(), &[4]);
-    assert_eq!(c.profiles()["job"].args, ["a \"quoted\" arg", r"c:\path"]);
-    assert_eq!(c.profiles()["job"].cwd, home.join("work"));
+    assert_eq!(
+        c.profiles()["job"].command.args,
+        ["a \"quoted\" arg", r"c:\path"]
+    );
+    assert_eq!(c.profiles()["job"].command.cwd, home.join("work"));
     c.write_manifest(files.path()).unwrap();
     assert_eq!(
         std::fs::read_to_string(&destination).unwrap(),

@@ -4,26 +4,8 @@ mod bindings;
 mod keys;
 mod profiles;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CtrlC {
-    Hide,
-    Quit,
-}
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct Profile {
-    pub program: String,
-    pub args: Vec<String>,
-    pub cwd: PathBuf,
-    pub width: u8,
-    pub height: u8,
-    pub ctrl_c: CtrlC,
-}
+use herdr_process_domain::Profile;
+use std::{collections::BTreeMap, path::Path};
 #[derive(Debug)]
 pub struct Configuration {
     profiles: BTreeMap<String, Profile>,

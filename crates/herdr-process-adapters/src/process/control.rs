@@ -1,4 +1,4 @@
-use super::ProcessSpec;
+use super::Command;
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -10,7 +10,7 @@ use std::{
 #[derive(Serialize, Deserialize)]
 pub(super) enum Message {
     Hello { secret: String, pid: u32 },
-    Start(ProcessSpec),
+    Start(Command),
     Ready(u32),
     Stop,
     Exit(i32),

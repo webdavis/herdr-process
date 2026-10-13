@@ -10,10 +10,10 @@ pub use readiness::Readiness;
 
 mod config;
 mod manifest;
-pub use config::{Configuration, ConfigurationPaths, CtrlC, Profile, resolve_configuration_paths};
+pub use config::{Configuration, ConfigurationPaths, resolve_configuration_paths};
 mod process;
 pub use portable_pty::PtySize;
-pub use process::{ProcessSpec, SupervisedProcess, supervise};
+pub use process::{SupervisedProcess, supervise};
 mod herdr;
 pub use herdr::{Herdr, HostCall, HostFailure, HostFailureCode, HostReply, OpenView};
 mod attachment_terminal;

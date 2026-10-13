@@ -1,7 +1,7 @@
-use super::{Profile, keys};
+use super::keys;
 use anyhow::{Context, Result, ensure};
 use herdr_process_application::InputRouter;
-use herdr_process_domain::{Action, Binding};
+use herdr_process_domain::{Action, Binding, Profile};
 use std::{collections::BTreeMap, time::Duration};
 
 pub(super) fn parse(

@@ -1,5 +1,5 @@
 use super::{
-    ProcessSpec,
+    Command,
     control::{Control, Message},
     directory::Directory,
 };
@@ -100,7 +100,7 @@ impl Startup {
             }
         }
     }
-    pub fn start(&mut self, spec: &ProcessSpec) -> Result<u32> {
+    pub fn start(&mut self, spec: &Command) -> Result<u32> {
         let control = self
             .control
             .as_mut()

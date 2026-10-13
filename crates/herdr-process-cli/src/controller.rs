@@ -53,7 +53,7 @@ fn run_in(
         &mut connection.peer,
         &Request::Action {
             profile: profile.to_owned(),
-            action: action.to_string(),
+            action,
             configuration: configuration.identity().to_owned(),
             target,
         },

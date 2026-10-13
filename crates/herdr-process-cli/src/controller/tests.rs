@@ -8,9 +8,9 @@ use std::{
 fn request() -> Request {
     Request::Action {
         profile: "test".into(),
-        action: "toggle-float".into(),
+        action: Action::ToggleFloat,
         configuration: "generation".into(),
-        target: herdr_process_protocol::Target {
+        target: herdr_process_domain::Target {
             workspace: "w".into(),
             pane: "p".into(),
         },
