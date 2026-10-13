@@ -8,14 +8,14 @@ use std::{
         fs::{FileExt, OpenOptionsExt},
         process::CommandExt,
     },
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
 
 pub(super) struct Launch {
     command: Command,
-    diagnostic: File,
+    runtime: PathBuf,
 }
 pub(super) struct Connection {
     pub peer: Peer,
@@ -24,6 +24,10 @@ pub(super) struct Connection {
 struct Candidate {
     child: Child,
     unstarted: bool,
+}
+struct StartupLog {
+    path: PathBuf,
+    file: File,
 }
 impl Connection {
     pub fn request_started(&mut self) {
@@ -42,18 +46,27 @@ impl Drop for Candidate {
         }
     }
 }
+impl StartupLog {
+    fn create(runtime: &Path) -> Result<Self> {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let path = runtime.join(format!("startup-{}-{stamp}.log", std::process::id()));
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&path)?;
+        Ok(Self { path, file })
+    }
+    fn remove(self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
 
 pub(super) fn command(environment: &Environment, host: &Herdr, runtime: &Path) -> Result<Launch> {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_nanos();
-    let diagnostic = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(runtime.join(format!("startup-{}-{stamp}.log", std::process::id())))?;
     let mut command = Command::new(std::env::current_exe()?);
     command
         .arg("manager")
@@ -71,11 +84,10 @@ pub(super) fn command(environment: &Environment, host: &Herdr, runtime: &Path) -
         .env_remove("HERDR_PROCESS_PROFILE")
         .env_remove("HERDR_PROCESS_SOCKET")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(diagnostic.try_clone()?);
+        .stdout(Stdio::null());
     Ok(Launch {
         command,
-        diagnostic,
+        runtime: runtime.to_path_buf(),
     })
 }
 
@@ -91,8 +103,10 @@ pub(super) fn connect(
         });
     }
     let deadline = Instant::now() + timeout;
+    let log = StartupLog::create(&launch.runtime)?;
     let child = launch
         .command
+        .stderr(log.file.try_clone()?)
         .process_group(0)
         .spawn()
         .context("manager startup failed")?;
@@ -104,26 +118,27 @@ pub(super) fn connect(
     loop {
         ensure!(Instant::now() < deadline, "manager startup timed out");
         let mut bytes = [0; 8192];
-        let length = launch.diagnostic.read_at(&mut bytes, 0)?;
-        let log = &bytes[..length];
+        let length = log.file.read_at(&mut bytes, 0)?;
+        let written = &bytes[..length];
         ensure!(
             length < bytes.len(),
             "manager startup diagnostics exceeded limit"
         );
-        if log.starts_with(b"herdr-process:ready\n") {
+        if written.starts_with(b"herdr-process:ready\n") {
             ready = true;
         }
         if let Some(owner) = candidate.as_mut()
             && let Some(status) = owner.child.try_wait()?
         {
             ensure!(
-                status.success() && log.starts_with(b"herdr-process:duplicate\n"),
+                status.success() && written.starts_with(b"herdr-process:duplicate\n"),
                 "manager startup failed"
             );
             candidate = None;
             ready = true;
         }
         if ready && let Some(peer) = available(endpoint)? {
+            log.remove();
             return Ok(Connection { peer, candidate });
         }
         std::thread::sleep(Duration::from_millis(1));

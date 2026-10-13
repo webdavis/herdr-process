@@ -125,3 +125,33 @@ fn context_must_be_an_object_when_supplied() {
         );
     }
 }
+#[test]
+fn runtime_key_is_pinned() {
+    let parts = [
+        OsStr::new("/private/host.sock"),
+        OsStr::new("/private/herdr.toml"),
+        OsStr::new("/private/processes.toml"),
+    ];
+    assert_eq!(runtime_key(&parts), 0xac3661a7ddb77d12);
+    let host = Herdr {
+        binary: "/private/bin/herdr".into(),
+        socket: "/private/host.sock".into(),
+    };
+    let paths = ConfigurationPaths {
+        profiles: "/private/processes.toml".into(),
+        herdr: "/private/herdr.toml".into(),
+    };
+    assert!(
+        runtime(&host, &paths)
+            .to_str()
+            .unwrap()
+            .ends_with("-ac3661a7ddb77d12")
+    );
+}
+#[test]
+fn runtime_key_separates_parts() {
+    assert_ne!(
+        runtime_key(&[OsStr::new("ab"), OsStr::new("c")]),
+        runtime_key(&[OsStr::new("a"), OsStr::new("bc")])
+    );
+}

@@ -133,9 +133,6 @@ fn composed_controller_loads_selected_configuration_and_sends_one_action() {
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut peer = loop {
             match listener.accept() {
-                // BSD accept inherits the listener's non-blocking flag, which
-                // would make every read below fail with EAGAIN instead of
-                // honouring the read timeout.
                 Ok((peer, _)) => {
                     peer.set_nonblocking(false).unwrap();
                     break peer;
