@@ -53,13 +53,8 @@ fn native_key_source_routes_verified_legacy_encodings() {
             "{HERDR}[[keys.command]]\nkey='prefix+{key}'\ntype='plugin_action'\ncommand='herdr-process.editor:split-below'\n"
         );
         let c = Configuration::parse(PROFILES, &herdr, Path::new("/private/home")).unwrap();
-        assert_eq!(c.prefix(), b"\x02");
-        let mut r = InputRouter::new(
-            c.prefix().to_vec(),
-            c.bindings().to_vec(),
-            Duration::from_millis(100),
-        )
-        .unwrap();
+        assert_eq!(c.keymap().prefix(), b"\x02");
+        let mut r = InputRouter::new(c.keymap());
         let input = [b"\x02".as_slice(), bytes].concat();
         assert_eq!(
             r.feed(&input, Duration::ZERO),
@@ -176,12 +171,7 @@ fn forty_profiles_invoke_all_four_native_manifest_actions_from_focused_input() {
     let manifest: toml::Value = toml::from_str(&c.render_manifest().unwrap()).unwrap();
     let entries = manifest["actions"].as_array().unwrap();
     assert_eq!(entries.len(), 160);
-    let mut router = InputRouter::new(
-        c.prefix().to_vec(),
-        c.bindings().to_vec(),
-        Duration::from_millis(100),
-    )
-    .unwrap();
+    let mut router = InputRouter::new(c.keymap());
     for (key, profile, spelling, action) in expected {
         let local = format!("{profile}:{spelling}");
         let entry = entries

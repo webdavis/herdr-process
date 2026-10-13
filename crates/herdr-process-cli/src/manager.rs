@@ -59,7 +59,7 @@ pub fn run(
                 .ok_or_else(|| anyhow::anyhow!("connection identity exhausted"))?;
             manager
                 .clients
-                .insert(next, Client::new(peer, &manager.configuration)?);
+                .insert(next, Client::new(peer, &manager.configuration));
         }
         manager.poll_clients();
         manager.poll_sessions()?;

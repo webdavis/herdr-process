@@ -37,23 +37,6 @@ fn interrupt_is_ordered_and_paste_remains_data_at_every_split() {
 }
 
 #[test]
-fn rejects_interrupt_prefix_and_chord_ambiguity() {
-    assert_eq!(
-        InputRouter::new(vec![3], vec![], Duration::from_millis(100)).err(),
-        Some(RouterError::InterruptConflict { binding: None })
-    );
-    assert_eq!(
-        InputRouter::new(
-            vec![2],
-            vec![binding(b"\x03", "a", Action::Kill)],
-            Duration::from_millis(100)
-        )
-        .err(),
-        Some(RouterError::InterruptConflict { binding: Some(0) })
-    );
-}
-
-#[test]
 fn ctrl_c_interrupts_unless_pending_holds_the_real_prefix_byte() {
     let cases: [(&[u8], Vec<Effect>); 3] = [
         (

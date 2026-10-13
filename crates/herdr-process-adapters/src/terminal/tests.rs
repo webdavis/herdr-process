@@ -104,7 +104,7 @@ fn successive_snapshots_clear_disabled_mouse_modes() {
 
 #[test]
 fn attachment_paste_framing_is_independent_of_child_mode() {
-    use herdr_process_application::{Effect, InputRouter};
+    use herdr_process_application::{Effect, InputRouter, Keymap};
     use herdr_process_domain::{Action, Binding};
     use std::time::Duration;
     let terminal = Terminal::new(6, 30);
@@ -116,15 +116,16 @@ fn attachment_paste_framing_is_independent_of_child_mode() {
         b"ak".as_slice()
     };
     let mut router = InputRouter::new(
-        b"a".to_vec(),
-        vec![Binding {
-            chord: b"k".to_vec(),
-            profile: "shell".into(),
-            action: Action::Kill,
-        }],
-        Duration::from_millis(100),
-    )
-    .unwrap();
+        &Keymap::new(
+            b"a".to_vec(),
+            vec![Binding {
+                chord: b"k".to_vec(),
+                profile: "shell".into(),
+                action: Action::Kill,
+            }],
+        )
+        .unwrap(),
+    );
     let effects = router.feed(input, Duration::ZERO);
     assert!(
         effects
@@ -166,12 +167,7 @@ fn shared_arrow_shortcuts_route_in_both_terminal_cursor_modes() {
             let mut input = prefix_bytes.clone();
             input.extend([27, arrow, b'B']);
             for split in 0..=input.len() {
-                let mut router = InputRouter::new(
-                    config.prefix().to_vec(),
-                    config.bindings().to_vec(),
-                    Duration::from_millis(100),
-                )
-                .unwrap();
+                let mut router = InputRouter::new(config.keymap());
                 let mut effects = router.feed(&input[..split], Duration::ZERO);
                 effects.extend(router.feed(&input[split..], Duration::ZERO));
                 assert_eq!(

@@ -1,9 +1,12 @@
+mod keymap;
 mod validation;
-pub use validation::RouterError;
+pub use keymap::Keymap;
+pub use validation::KeymapError;
 mod paste;
-use herdr_process_domain::{Action, Binding};
+use herdr_process_domain::Action;
 use paste::{Paste, PasteInput};
 use std::time::Duration;
+const CHORD_TIMEOUT: Duration = Duration::from_millis(100);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Effect {
     Forward(Vec<u8>),
@@ -12,27 +15,18 @@ pub enum Effect {
 }
 pub struct InputRouter {
     paste: Paste,
-    prefix: Vec<u8>,
-    bindings: Vec<Binding>,
+    keymap: Keymap,
     pending: Vec<u8>,
-    timeout: Duration,
     last: Duration,
 }
 impl InputRouter {
-    pub fn new(
-        prefix: Vec<u8>,
-        bindings: Vec<Binding>,
-        timeout: Duration,
-    ) -> Result<Self, RouterError> {
-        validation::validate(&prefix, &bindings, timeout)?;
-        Ok(Self {
+    pub fn new(keymap: &Keymap) -> Self {
+        Self {
             paste: Paste::default(),
-            prefix,
-            bindings,
+            keymap: keymap.clone(),
             pending: Vec::new(),
-            timeout,
             last: Duration::ZERO,
-        })
+        }
     }
     pub fn feed(&mut self, bytes: &[u8], now: Duration) -> Vec<Effect> {
         let mut effects = self.expire(now);
@@ -62,7 +56,7 @@ impl InputRouter {
     }
     pub fn expire(&mut self, now: Duration) -> Vec<Effect> {
         let mut effects = Vec::new();
-        if now.saturating_sub(self.last) >= self.timeout {
+        if now.saturating_sub(self.last) >= CHORD_TIMEOUT {
             forward(&mut effects, &std::mem::take(&mut self.pending));
             forward(&mut effects, &self.paste.flush());
         }
@@ -71,24 +65,25 @@ impl InputRouter {
     fn route(&mut self, byte: u8, effects: &mut Vec<Effect>) {
         self.pending.push(byte);
         loop {
-            if key_prefix(&self.prefix, &self.pending) {
+            if key_prefix(self.keymap.prefix(), &self.pending) {
                 return;
             }
-            let prefix_len = self.prefix.len();
+            let prefix_len = self.keymap.prefix().len();
             if self.pending.len() >= prefix_len
-                && key_prefix(&self.prefix, &self.pending[..prefix_len])
+                && key_prefix(self.keymap.prefix(), &self.pending[..prefix_len])
             {
                 let chord = &self.pending[prefix_len..];
-                if chord.len() == prefix_len && key_prefix(&self.prefix, chord) {
+                if chord.len() == prefix_len && key_prefix(self.keymap.prefix(), chord) {
                     forward(effects, &self.pending[..prefix_len]);
                     self.pending.clear();
                     return;
                 }
-                if key_prefix(&self.prefix, chord) {
+                if key_prefix(self.keymap.prefix(), chord) {
                     return;
                 }
                 if let Some(binding) = self
-                    .bindings
+                    .keymap
+                    .bindings()
                     .iter()
                     .find(|b| b.chord.len() == chord.len() && key_prefix(&b.chord, chord))
                 {
@@ -99,7 +94,12 @@ impl InputRouter {
                     self.pending.clear();
                     return;
                 }
-                if self.bindings.iter().any(|b| key_prefix(&b.chord, chord)) {
+                if self
+                    .keymap
+                    .bindings()
+                    .iter()
+                    .any(|b| key_prefix(&b.chord, chord))
+                {
                     return;
                 }
             }

@@ -112,7 +112,7 @@ fn command_schema_and_native_whitespace_are_not_silently_ignored() {
         Path::new("/private/home"),
     )
     .unwrap();
-    assert_eq!(c.bindings().len(), 1);
+    assert_eq!(c.keymap().bindings().len(), 1);
     for text in [
         command.replace("type='plugin_action'", "type='typo'"),
         command.replace("key='prefix+R'", "key=[1]"),
