@@ -36,6 +36,7 @@ impl std::fmt::Display for HostFailure {
     }
 }
 impl std::error::Error for HostFailure {}
+#[derive(Debug, PartialEq, Eq)]
 pub(super) enum Expected {
     Popup,
     Split,
