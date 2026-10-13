@@ -1,4 +1,5 @@
 use super::reply::{Expected, HostFailure, HostFailureCode, HostReply};
+use crate::unix;
 use std::{
     io::{self, Read},
     os::fd::AsRawFd,
@@ -163,20 +164,17 @@ fn read_pipe(
     let mut buffer = [0; READ_BUDGET];
     let remaining = OUTPUT_LIMIT.saturating_sub(bytes.len() + other);
     let size = buffer.len().min(remaining + 1);
-    match reader.read(&mut buffer[..size]) {
-        Ok(0) => *pipe = None,
-        Ok(count) => {
+    match unix::ready(reader.read(&mut buffer[..size]))
+        .map_err(|_| HostFailure::new(HostFailureCode::Io))?
+    {
+        Some(0) => *pipe = None,
+        Some(count) => {
             if count > remaining {
                 return Err(HostFailure::new(HostFailureCode::Oversized));
             }
             bytes.extend_from_slice(&buffer[..count]);
         }
-        Err(error)
-            if matches!(
-                error.kind(),
-                io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-            ) => {}
-        Err(_) => return Err(HostFailure::new(HostFailureCode::Io)),
+        None => {}
     }
     Ok(())
 }

@@ -6,6 +6,7 @@ pub use transport::Peer;
 mod endpoint;
 pub use endpoint::{Endpoint, Listener};
 mod readiness;
+mod unix;
 pub use readiness::Readiness;
 
 mod config;

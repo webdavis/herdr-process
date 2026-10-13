@@ -1,4 +1,5 @@
 use super::{Command, control};
+use crate::unix;
 use anyhow::{Result, ensure};
 use std::{
     ffi::CString,
@@ -102,15 +103,15 @@ impl Launch {
         let mut bytes = Vec::new();
         loop {
             let mut b = [0; 4];
-            match self.errors.read(&mut b) {
-                Ok(0) => {
+            match unix::ready(self.errors.read(&mut b))? {
+                Some(0) => {
                     ensure!(
                         bytes.is_empty(),
                         "configured command exec failed: {bytes:?}"
                     );
                     return Ok(());
                 }
-                Ok(n) => {
+                Some(n) => {
                     bytes.extend_from_slice(&b[..n]);
                     ensure!(
                         bytes.len() < 4,
@@ -120,11 +121,7 @@ impl Launch {
                         ))
                     );
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    control::wait(fd, libc::POLLIN, end)?
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
+                None => control::wait(fd, libc::POLLIN, end)?,
             }
         }
     }

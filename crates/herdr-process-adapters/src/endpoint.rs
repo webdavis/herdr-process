@@ -1,4 +1,4 @@
-use crate::{Peer, Readiness};
+use crate::{Peer, Readiness, unix};
 use std::{
     fs::{self, File, OpenOptions},
     io,
@@ -30,12 +30,7 @@ impl Endpoint {
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(error),
         }
-        let metadata = fs::symlink_metadata(root)?;
-        // The directory is the trust boundary for every endpoint entry.
-        if !metadata.is_dir()
-            || metadata.uid() != unsafe { libc::geteuid() }
-            || metadata.mode() & 0o777 != 0o700
-        {
+        if !unix::private_directory(root)? {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "endpoint directory must be owned and private",
@@ -59,23 +54,14 @@ impl Endpoint {
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(self.root.join("owner.lock"))?;
         let metadata = lock.metadata()?;
-        if !metadata.is_file()
-            || metadata.uid() != unsafe { libc::geteuid() }
-            || metadata.mode() & 0o777 != 0o600
-        {
+        if !metadata.is_file() || !unix::owned(&metadata) || metadata.mode() & 0o777 != 0o600 {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "unsafe endpoint lock",
             ));
         }
-        // The retained descriptor owns this advisory lock until Listener drops.
-        if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            let error = io::Error::last_os_error();
-            return if error.kind() == io::ErrorKind::WouldBlock {
-                Ok(None)
-            } else {
-                Err(error)
-            };
+        if unix::ready(try_lock(&lock))?.is_none() {
+            return Ok(None);
         }
         let socket = self.socket();
         match socket_metadata(&socket) {
@@ -108,18 +94,9 @@ impl Listener {
     }
 
     pub fn accept(&self) -> io::Result<Option<Peer>> {
-        match self.listener.accept() {
-            Ok((stream, _)) => Peer::new(stream).map(Some),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                ) =>
-            {
-                Ok(None)
-            }
-            Err(error) => Err(error),
-        }
+        unix::ready(self.listener.accept())?
+            .map(|(stream, _)| Peer::new(stream))
+            .transpose()
     }
 }
 
@@ -135,13 +112,20 @@ impl Drop for Listener {
 
 fn socket_metadata(path: &Path) -> io::Result<fs::Metadata> {
     let metadata = fs::symlink_metadata(path)?;
-    if !metadata.file_type().is_socket() || metadata.uid() != unsafe { libc::geteuid() } {
+    if !metadata.file_type().is_socket() || !unix::owned(&metadata) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "unsafe endpoint socket",
         ));
     }
     Ok(metadata)
+}
+
+fn try_lock(file: &File) -> io::Result<()> {
+    match unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
+    }
 }
 
 #[cfg(test)]

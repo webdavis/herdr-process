@@ -1,4 +1,4 @@
-use crate::Readiness;
+use crate::{Readiness, unix};
 use herdr_process_protocol::{Decoder, MAX_FRAME, encode};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
@@ -29,21 +29,13 @@ impl Peer {
 
     pub fn read<T: DeserializeOwned>(&mut self) -> io::Result<Option<Vec<T>>> {
         let mut bytes = [0; 8192];
-        match self.stream.read(&mut bytes) {
-            Ok(0) => {
+        match unix::ready(self.stream.read(&mut bytes))? {
+            Some(0) => {
                 self.decoder.finish()?;
                 Ok(None)
             }
-            Ok(count) => self.decoder.feed(&bytes[..count]).map(Some),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                ) =>
-            {
-                Ok(Some(Vec::new()))
-            }
-            Err(error) => Err(error),
+            Some(count) => self.decoder.feed(&bytes[..count]).map(Some),
+            None => Ok(Some(Vec::new())),
         }
     }
 
@@ -67,14 +59,14 @@ impl Peer {
                 break;
             }
             let end = front.len().min(self.offset + budget);
-            match self.stream.write(&front[self.offset..end]) {
-                Ok(0) => {
+            match unix::ready(self.stream.write(&front[self.offset..end]))? {
+                Some(0) => {
                     return Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "connection stopped accepting output",
                     ));
                 }
-                Ok(count) => {
+                Some(count) => {
                     self.offset += count;
                     self.queued -= count;
                     budget -= count;
@@ -83,15 +75,7 @@ impl Peer {
                         self.offset = 0;
                     }
                 }
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                    ) =>
-                {
-                    break;
-                }
-                Err(error) => return Err(error),
+                None => break,
             }
         }
         Ok(self.is_idle())

@@ -1,4 +1,5 @@
 use super::Command;
+use crate::unix;
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -35,14 +36,10 @@ impl Control {
         let end = Instant::now() + Duration::from_millis(200);
         let mut offset = 0;
         while offset < bytes.len() {
-            match self.stream.write(&bytes[offset..]) {
-                Ok(0) => bail!("guardian control write closed"),
-                Ok(n) => offset += n,
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    wait(self.stream.as_raw_fd(), libc::POLLOUT, end)?
-                }
-                Err(e) => return Err(e.into()),
+            match unix::ready(self.stream.write(&bytes[offset..]))? {
+                Some(0) => bail!("guardian control write closed"),
+                Some(n) => offset += n,
+                None => wait(self.stream.as_raw_fd(), libc::POLLOUT, end)?,
             }
         }
         Ok(())
@@ -57,12 +54,10 @@ impl Control {
             }
             ensure!(self.buffer.len() < 65536, "guardian frame exceeds limit");
             let mut bytes = [0; 4096];
-            match self.stream.read(&mut bytes) {
-                Ok(0) => bail!("guardian control EOF"),
-                Ok(n) => self.buffer.extend_from_slice(&bytes[..n]),
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
-                Err(e) => return Err(e.into()),
+            match unix::ready(self.stream.read(&mut bytes))? {
+                Some(0) => bail!("guardian control EOF"),
+                Some(n) => self.buffer.extend_from_slice(&bytes[..n]),
+                None => return Ok(None),
             }
         }
     }

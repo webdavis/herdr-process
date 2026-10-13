@@ -3,6 +3,7 @@ use super::{
     control::{Control, Message},
     directory::Directory,
 };
+use crate::unix;
 use anyhow::{Result, bail, ensure};
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use std::{
@@ -38,9 +39,7 @@ impl Startup {
         let socket = directory.0.join("s");
         let listener = UnixListener::bind(&socket)?;
         listener.set_nonblocking(true)?;
-        let mut random = [0u8; 16];
-        unsafe { libc::arc4random_buf(random.as_mut_ptr().cast(), random.len()) };
-        let secret: String = random.iter().map(|b| format!("{b:02x}")).collect();
+        let secret = unix::random_hex(16);
         let pair = native_pty_system().openpty(size)?;
         let fd = pair
             .master
@@ -78,8 +77,8 @@ impl Startup {
         };
         let end = Instant::now() + Duration::from_millis(300);
         loop {
-            match listener.accept() {
-                Ok((stream, _)) => {
+            match unix::ready(listener.accept())? {
+                Some((stream, _)) => {
                     let mut control = Control::new(stream)?;
                     let hello = control.until(end)?;
                     ensure!(
@@ -89,14 +88,13 @@ impl Startup {
                     startup.control = Some(control);
                     return Ok(startup);
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                None => {
                     ensure!(
                         startup.child.try_wait()?.is_none(),
                         "guardian exited before authentication"
                     );
                     super::control::wait(listener.as_raw_fd(), libc::POLLIN, end)?;
                 }
-                Err(e) => return Err(e.into()),
             }
         }
     }
@@ -116,20 +114,12 @@ impl Startup {
     pub fn reap(&mut self, end: Instant) -> Result<portable_pty::ExitStatus> {
         loop {
             let mut bytes = [0; 8192];
-            match self.reader.read(&mut bytes) {
-                Ok(n) => {
-                    ensure!(
-                        self.tail.len() + n <= 1048576,
-                        "final terminal output exceeds retained capacity"
-                    );
-                    self.tail.extend_from_slice(&bytes[..n]);
-                }
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                    ) => {}
-                Err(e) => return Err(e.into()),
+            if let Some(n) = unix::ready(self.reader.read(&mut bytes))? {
+                ensure!(
+                    self.tail.len() + n <= 1048576,
+                    "final terminal output exceeds retained capacity"
+                );
+                self.tail.extend_from_slice(&bytes[..n]);
             }
             if let Some(status) = self.child.try_wait()? {
                 return Ok(status);
