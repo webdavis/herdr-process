@@ -60,6 +60,12 @@ impl Session {
         self.terminal.resize(rows, cols);
         Ok(())
     }
+    pub fn watch(&self, readiness: &mut adapters::Readiness) {
+        self.process.watch(readiness);
+        if !self.input.is_empty() {
+            self.process.watch_writable(readiness);
+        }
+    }
     pub fn input(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
         anyhow::ensure!(
             self.input.len() + bytes.len() <= 1024 * 1024,

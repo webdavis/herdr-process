@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::TempRoot;
+use crate::{Readiness, test_support::TempRoot};
 use herdr_process_protocol::Response;
 use std::{
     fs,
@@ -83,4 +83,44 @@ fn stale_private_socket_recovers_but_replaced_socket_survives_old_owner_drop() {
     drop(owner);
     assert_eq!(fs::metadata(endpoint.socket()).unwrap().ino(), identity);
     drop(replacement);
+}
+
+#[test]
+fn watched_listener_waits_the_whole_timeout_when_nobody_connects() {
+    let temporary = TempRoot::new();
+    let endpoint = Endpoint::new(&temporary.join("endpoint")).unwrap();
+    let listener = endpoint.bind().unwrap().unwrap();
+    let mut readiness = Readiness::default();
+    listener.watch(&mut readiness);
+    let start = Instant::now();
+    readiness.wait(Some(Duration::from_millis(50))).unwrap();
+    assert!(
+        start.elapsed() >= Duration::from_millis(50),
+        "returned after {:?}",
+        start.elapsed()
+    );
+    assert!(listener.accept().unwrap().is_none());
+}
+
+#[test]
+fn watched_listener_wakes_as_soon_as_a_client_connects() {
+    let temporary = TempRoot::new();
+    let endpoint = Endpoint::new(&temporary.join("endpoint")).unwrap();
+    let listener = endpoint.bind().unwrap().unwrap();
+    let socket = endpoint.socket();
+    let client = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(20));
+        UnixStream::connect(socket).unwrap()
+    });
+    let mut readiness = Readiness::default();
+    listener.watch(&mut readiness);
+    let start = Instant::now();
+    readiness.wait(Some(Duration::from_secs(5))).unwrap();
+    assert!(
+        start.elapsed() < Duration::from_secs(1),
+        "woke only after {:?}",
+        start.elapsed()
+    );
+    assert!(listener.accept().unwrap().is_some());
+    client.join().unwrap();
 }

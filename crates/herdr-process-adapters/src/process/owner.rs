@@ -1,8 +1,10 @@
 use super::{ProcessSpec, control::Message, startup::Startup};
+use crate::Readiness;
 use anyhow::{Result, bail, ensure};
 use portable_pty::PtySize;
 use std::{
     io::{Read, Write},
+    os::fd::AsRawFd,
     path::Path,
     time::{Duration, Instant},
 };
@@ -30,6 +32,19 @@ impl SupervisedProcess {
     }
     pub fn pid(&self) -> u32 {
         self.pid
+    }
+    pub fn watch(&self, readiness: &mut Readiness) {
+        if let Some(fd) = self.startup.master.as_raw_fd() {
+            readiness.readable(fd);
+        }
+        if let Some(control) = &self.startup.control {
+            readiness.readable(control.stream.as_raw_fd());
+        }
+    }
+    pub fn watch_writable(&self, readiness: &mut Readiness) {
+        if let Some(fd) = self.startup.master.as_raw_fd() {
+            readiness.writable(fd);
+        }
     }
     pub fn resize(&mut self, size: PtySize) -> Result<()> {
         ensure!(

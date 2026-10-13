@@ -1,9 +1,10 @@
+use crate::Readiness;
 use herdr_process_protocol::{Decoder, MAX_FRAME, encode};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     collections::VecDeque,
     io::{self, Read, Write},
-    os::unix::net::UnixStream,
+    os::{fd::AsRawFd, unix::net::UnixStream},
 };
 
 pub struct Peer {
@@ -98,6 +99,13 @@ impl Peer {
 
     pub fn is_idle(&self) -> bool {
         self.outgoing.is_empty()
+    }
+
+    pub fn watch(&self, readiness: &mut Readiness) {
+        readiness.readable(self.stream.as_raw_fd());
+        if !self.is_idle() {
+            readiness.writable(self.stream.as_raw_fd());
+        }
     }
 }
 
