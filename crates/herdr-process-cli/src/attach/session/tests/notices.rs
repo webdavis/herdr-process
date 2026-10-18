@@ -3,7 +3,6 @@ use super::*;
 const ERROR: &str =
     "shell split-right: split needs a workspace and pane; invoke from a current pane";
 const SHOWN: &str = "\x1b7\x1b[24;1H\x1b[2K\x1b[38;2;243;139;168mshell split-right: split needs a workspace and pane; invoke from a current pane\x1b[0m\x1b8";
-const ERASED: &str = "\x1b7\x1b[24;1H\x1b[2K\x1b8";
 
 fn attached_session(script: impl FnOnce(&mut UnixStream) + Send + 'static) -> String {
     let (mut master, slave) = pty(24, 80);
@@ -49,15 +48,16 @@ fn attached_session(script: impl FnOnce(&mut UnixStream) + Send + 'static) -> St
 }
 
 #[test]
-fn an_expired_notice_is_erased_without_waiting_for_the_next_screen() {
+fn an_expired_notice_gives_way_to_the_last_screen_without_waiting_for_the_next() {
     let output = attached_session(|_| std::thread::sleep(Duration::from_millis(5300)));
     assert_eq!(output.matches(SHOWN).count(), 1, "{output:?}");
-    assert!(output.contains(&format!("{SHOWN}{ERASED}")), "{output:?}");
+    assert!(output.contains(&format!("{SHOWN}$ ")), "{output:?}");
+    assert!(!output.contains("\x1b[2K\x1b8"), "{output:?}");
 }
 
 #[test]
 fn an_error_then_retire_shows_the_notice_and_the_session_ends_cleanly() {
     let output = attached_session(|_| std::thread::sleep(Duration::from_millis(50)));
     assert_eq!(output.matches(SHOWN).count(), 1, "{output:?}");
-    assert!(!output.contains(ERASED), "{output:?}");
+    assert_eq!(output.matches("$ ").count(), 1, "{output:?}");
 }

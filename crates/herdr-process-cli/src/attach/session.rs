@@ -34,7 +34,7 @@ pub(super) fn run(
     let deadline = Instant::now() + timeout;
     let mut phase = Phase::Screen;
     let mut screens = Screens::default();
-    let mut saw_screen = false;
+    let mut screen: Option<Vec<u8>> = None;
     let mut notice: Option<Notice> = None;
     loop {
         ensure!(
@@ -48,13 +48,13 @@ pub(super) fn run(
         for response in responses {
             match response {
                 Response::Screen { bytes } => {
-                    saw_screen = true;
-                    screens.push(bytes)?;
+                    screens.push(bytes.clone())?;
+                    screen = Some(bytes);
                     if let Some(notice) = &notice {
                         screens.push(notice.render(size))?;
                     }
                 }
-                Response::Attached {} if phase == Phase::Screen && saw_screen => {
+                Response::Attached {} if phase == Phase::Screen && screen.is_some() => {
                     phase = Phase::Replay
                 }
                 Response::Ack {} if phase == Phase::Acknowledgement && peer.is_idle() => {
@@ -74,7 +74,7 @@ pub(super) fn run(
             .as_ref()
             .is_some_and(|shown| shown.expired(Instant::now()))
         {
-            screens.push(Notice::erase(size))?;
+            screens.push(screen.clone().unwrap_or_default())?;
             notice = None;
         }
         screens.write(terminal)?;
