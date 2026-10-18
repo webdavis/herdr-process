@@ -109,3 +109,6 @@ impl<P: Ports> Manager<P> {
         self.now.saturating_duration_since(self.epoch)
     }
 }
+
+#[cfg(test)]
+mod tests;

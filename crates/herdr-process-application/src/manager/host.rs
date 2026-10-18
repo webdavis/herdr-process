@@ -1,6 +1,7 @@
 use herdr_process_domain::{Direction, Target};
 use std::path::PathBuf;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OpenView {
     pub profile: String,
     pub ticket: String,
