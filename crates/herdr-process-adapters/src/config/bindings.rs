@@ -22,12 +22,12 @@ pub(super) fn parse(text: &str, profiles: &BTreeMap<String, Profile>) -> Result<
     let table = root
         .get("keys")
         .and_then(toml::Value::as_table)
-        .context("missing Herdr [keys] table and prefix")?;
+        .context("missing herdr [keys] table and prefix")?;
     let prefix = keys::encode(
         table
             .get("prefix")
             .and_then(toml::Value::as_str)
-            .context("missing Herdr keys.prefix")?,
+            .context("missing herdr keys.prefix")?,
     )?;
     let mut registered = Registry::default();
     registered.prefix(&prefix);
@@ -98,7 +98,7 @@ fn entry<'a>(command: &'a toml::Value, profiles: &BTreeMap<String, Profile>) -> 
     if command.get("type").is_some() {
         ensure!(
             matches!(kind, Some("shell" | "pane" | "popup" | "plugin_action")),
-            "unsupported Herdr command type"
+            "unsupported herdr command type"
         );
     }
     let key = command.get("key").context("command is missing key");
@@ -141,7 +141,7 @@ pub(super) fn resolve_action(
         .context("expected qualified herdr-process action")?;
     let (profile, action) = local
         .split_once(':')
-        .context("use herdr-process.<profile>:<action>; Herdr rejects dots in local action IDs")?;
+        .context("use herdr-process.<profile>:<action>; herdr rejects dots in local action IDs")?;
     ensure!(
         profiles.contains_key(profile),
         "unknown process profile {profile:?}"

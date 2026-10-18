@@ -145,3 +145,26 @@ fn overlapping_owned_keys_name_both_bindings() {
         "bindings editor:kill and editor:split-below use the same or overlapping keys"
     );
 }
+#[test]
+fn configuration_errors_spell_herdr_in_lower_case() {
+    let home = Path::new("/private/home");
+    let error = |herdr: &str| {
+        Configuration::parse(PROFILES, herdr, home)
+            .unwrap_err()
+            .to_string()
+    };
+    assert_eq!(error(""), "missing herdr [keys] table and prefix");
+    assert_eq!(error("[keys]\n"), "missing herdr keys.prefix");
+    assert_eq!(
+        error(&format!(
+            "{HERDR}[[keys.command]]\nkey='prefix+r'\ntype='other'\ncommand='x'"
+        )),
+        "unsupported herdr command type"
+    );
+    assert_eq!(
+        error(&format!(
+            "{HERDR}[[keys.command]]\nkey='prefix+r'\ntype='plugin_action'\ncommand='herdr-process.editor.kill'"
+        )),
+        "use herdr-process.<profile>:<action>; herdr rejects dots in local action IDs"
+    );
+}

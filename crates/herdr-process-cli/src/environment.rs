@@ -75,9 +75,9 @@ pub fn target(get: impl Fn(&str) -> Option<OsString>) -> Result<Target> {
     let context: serde_json::Value = match get("HERDR_PLUGIN_CONTEXT_JSON") {
         Some(value) => {
             let context: serde_json::Value =
-                serde_json::from_str(value.to_str().context("invalid Herdr context encoding")?)
-                    .context("invalid Herdr context")?;
-            ensure!(context.is_object(), "invalid Herdr context object");
+                serde_json::from_str(value.to_str().context("invalid herdr context encoding")?)
+                    .context("invalid herdr context")?;
+            ensure!(context.is_object(), "invalid herdr context object");
             context
         }
         None => serde_json::Value::Null,
@@ -88,8 +88,8 @@ pub fn target(get: impl Fn(&str) -> Option<OsString>) -> Result<Target> {
             None | Some(serde_json::Value::Null) => get(fallback)
                 .unwrap_or_default()
                 .into_string()
-                .map_err(|_| anyhow::anyhow!("invalid Herdr target encoding")),
-            _ => anyhow::bail!("invalid Herdr target field"),
+                .map_err(|_| anyhow::anyhow!("invalid herdr target encoding")),
+            _ => anyhow::bail!("invalid herdr target field"),
         }
     };
     Ok(Target {
