@@ -26,7 +26,7 @@ impl<P: Ports> Manager<P> {
                 anyhow::ensure!(role == Role::Fresh, "connection already assigned");
                 anyhow::ensure!(
                     configuration == self.settings.identity,
-                    "configuration changed; retry with the current configuration"
+                    "configuration changed; kill the running processes to load it"
                 );
                 anyhow::ensure!(
                     self.settings.profiles.contains_key(&profile),
@@ -35,7 +35,7 @@ impl<P: Ports> Manager<P> {
                 anyhow::ensure!(self.queue.len() < 128, "request queue full; retry");
                 self.clients.get_mut(&id).unwrap().role = Role::Controller;
                 self.queue.push_back(Work::Command(Command {
-                    reply: Some(id),
+                    origin: Origin::Controller(id),
                     profile,
                     action,
                     target,
@@ -48,23 +48,32 @@ impl<P: Ports> Manager<P> {
                 cols,
             } => {
                 anyhow::ensure!(role == Role::Fresh, "connection already assigned");
-                let pending = self
+                let transition = self
                     .pending
                     .as_mut()
                     .ok_or_else(|| anyhow::anyhow!("stale attachment"))?;
-                anyhow::ensure!(
-                    pending.command.profile == profile
-                        && pending.ticket == ticket
-                        && pending.candidate.is_none(),
-                    "invalid attachment capability"
-                );
+                let slot = match &mut transition.step {
+                    Step::Opening(opening)
+                        if transition.command.profile == profile && opening.ticket == ticket =>
+                    {
+                        opening.candidate_slot()
+                    }
+                    _ => None,
+                };
+                let slot = slot
+                    .filter(|slot| slot.is_none())
+                    .ok_or_else(|| anyhow::anyhow!("invalid attachment capability"))?;
                 let session = self
                     .sessions
                     .get_mut(&profile)
                     .ok_or_else(|| anyhow::anyhow!("session exited"))?;
                 sessions::validate_size(rows, cols)?;
-                pending.dimensions = Some((rows, cols));
-                pending.candidate = Some(id);
+                *slot = Some(Candidate {
+                    id,
+                    rows,
+                    cols,
+                    ready: false,
+                });
                 let screen = session.preview(rows, cols);
                 self.clients.get_mut(&id).unwrap().role = Role::Candidate(profile);
                 self.send(id, Response::Screen { bytes: screen });
@@ -75,15 +84,17 @@ impl<P: Ports> Manager<P> {
                     matches!(role, Role::Candidate(_)),
                     "attachment is not awaiting readiness"
                 );
-                let pending = self
+                let candidate = self
                     .pending
                     .as_mut()
-                    .ok_or_else(|| anyhow::anyhow!("stale attachment"))?;
-                anyhow::ensure!(
-                    pending.candidate == Some(id) && !pending.ready,
-                    "duplicate readiness"
-                );
-                pending.ready = true;
+                    .ok_or_else(|| anyhow::anyhow!("stale attachment"))?
+                    .candidate_mut();
+                match candidate {
+                    Some(candidate) if candidate.id == id && !candidate.ready => {
+                        candidate.ready = true
+                    }
+                    _ => anyhow::bail!("duplicate readiness"),
+                }
             }
             Request::Input { bytes } => {
                 anyhow::ensure!(

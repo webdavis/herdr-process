@@ -95,7 +95,11 @@ impl<P: Ports> Manager<P> {
                     if client.role == Role::Active(name.clone()) {
                         client.screen = Some(session.terminal.snapshot());
                     } else if client.role == Role::Candidate(name.clone())
-                        && let Some((rows, cols)) = self.pending.as_ref().and_then(|p| p.dimensions)
+                        && let Some((rows, cols)) = self
+                            .pending
+                            .as_ref()
+                            .and_then(|t| t.candidate())
+                            .map(|c| (c.rows, c.cols))
                     {
                         client.screen = Some(session.preview(rows, cols));
                     }

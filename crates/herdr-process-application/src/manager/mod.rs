@@ -9,7 +9,7 @@ mod sessions;
 mod transitions;
 use crate::{Effect, InputRouter, ViewIntent, view_intent};
 use clients::{Client, Role};
-use herdr_process_domain::{Action, Placement, Profile, Target};
+use herdr_process_domain::{Action, Direction, Placement, Profile, Target};
 use herdr_process_protocol::{Request, Response};
 use input::Work;
 use sessions::Session;
@@ -18,7 +18,7 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-use transitions::{Command, Pending};
+use transitions::{Candidate, Command, Origin, Stage, Step, Transition};
 
 const TICK: Duration = Duration::from_millis(10);
 
@@ -37,7 +37,7 @@ pub struct Manager<P: Ports> {
     clients: BTreeMap<usize, Client<P>>,
     sessions: BTreeMap<String, Session<P>>,
     queue: VecDeque<Work>,
-    pending: Option<Pending<P>>,
+    pending: Option<Transition<P>>,
     epoch: Instant,
     now: Instant,
     completed: bool,

@@ -1,6 +1,6 @@
 use super::*;
 use fakes::FakeTickets;
-use herdr_process_domain::{Command, CtrlC};
+use herdr_process_domain::{Binding, Command, CtrlC};
 
 pub fn target(workspace: &str, pane: &str) -> Target {
     Target {
@@ -37,7 +37,15 @@ impl World {
         let now = Instant::now();
         let settings = Settings {
             identity: "config-1".into(),
-            keymap: crate::Keymap::new(vec![1], Vec::new()).unwrap(),
+            keymap: crate::Keymap::new(
+                vec![1],
+                vec![Binding {
+                    chord: b"r".to_vec(),
+                    profile: "shell".into(),
+                    action: Action::SplitRight,
+                }],
+            )
+            .unwrap(),
             profiles: BTreeMap::from([
                 ("shell".to_owned(), profile(CtrlC::Hide)),
                 ("quit".to_owned(), profile(CtrlC::Quit)),

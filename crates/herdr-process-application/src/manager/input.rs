@@ -87,7 +87,7 @@ impl<P: Ports> Manager<P> {
             {
                 let action = self.settings.profiles[&profile].ctrl_c.action();
                 self.execute(Command {
-                    reply: None,
+                    origin: Origin::Attachment(id),
                     profile,
                     action,
                     target,
@@ -97,7 +97,7 @@ impl<P: Ports> Manager<P> {
             Effect::Interrupt => session.input(&[3]),
             Effect::Invoke { profile, action } => {
                 self.execute(Command {
-                    reply: None,
+                    origin: Origin::Attachment(id),
                     profile,
                     action,
                     target,

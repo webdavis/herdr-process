@@ -22,7 +22,7 @@ impl Configuration {
             .iter()
             .map(|b| (&b.chord, &b.profile, b.action.to_string()))
             .collect();
-        let identity = serde_json::to_string(&(&profiles, herdr, keymap.prefix(), mapping))?;
+        let identity = serde_json::to_string(&(&profiles, keymap.prefix(), mapping))?;
         Ok(Self {
             profiles,
             keymap,
