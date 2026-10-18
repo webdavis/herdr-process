@@ -25,8 +25,7 @@ fn foreign_chords_the_legacy_encoder_cannot_represent_are_skipped() {
 
 #[test]
 fn foreign_chords_the_legacy_encoder_can_represent_still_collide() {
-    // The reported chord is the second spelling registered for the same bytes.
-    for (herdr, chord) in [
+    for (herdr, second_spelling) in [
         (format!("{HERDR}help='prefix+shift+r'\n{OWNED}"), "prefix+R"),
         (
             format!("{HERDR}goto='prefix+R'\nhelp='prefix+shift+r'\n"),
@@ -42,7 +41,7 @@ fn foreign_chords_the_legacy_encoder_can_represent_still_collide() {
         let error = parse(&herdr).expect_err(&herdr).to_string();
         assert_eq!(
             error,
-            format!("duplicate or conflicting native chord {chord:?}"),
+            format!("duplicate or conflicting native chord {second_spelling:?}"),
             "{herdr}"
         );
     }

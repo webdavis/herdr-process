@@ -39,7 +39,6 @@ fn main() {
             std::process::exit(2);
         }
     };
-    // The fresh guardian must dispatch before any background thread exists.
     let result = match arguments {
         Arguments::Supervise(remaining) => adapters::supervise(&remaining),
         other => dispatch(other).map(|()| 0),

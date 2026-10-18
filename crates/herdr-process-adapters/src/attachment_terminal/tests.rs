@@ -66,11 +66,10 @@ fn assert_restored(expected: &libc::termios, actual: &libc::termios) {
     assert_eq!(actual.c_iflag, expected.c_iflag);
     assert_eq!(actual.c_oflag, expected.c_oflag);
     assert_eq!(actual.c_cflag, expected.c_cflag);
-    // Darwin sets this transient state when restoring canonical input (xnu tty.c,
-    // TIOCSETA). Compare the configured flags without consuming pending input.
+    let without_darwin_pending_input = |flags: libc::tcflag_t| flags & !libc::PENDIN;
     assert_eq!(
-        actual.c_lflag & !libc::PENDIN,
-        expected.c_lflag & !libc::PENDIN
+        without_darwin_pending_input(actual.c_lflag),
+        without_darwin_pending_input(expected.c_lflag)
     );
     assert_eq!(actual.c_cc, expected.c_cc);
 }
@@ -94,16 +93,16 @@ fn raw_attachment_preserves_input_bytes_size_and_output_then_restores_terminal()
     assert_eq!(terminal.write(b"draft\n").unwrap(), 6);
     terminal.finish().unwrap();
     assert_restored(&before, &pty.attributes());
-    // Darwin also returns its read-only FWASWRITTEN history after output.
-    let restorable = libc::O_NONBLOCK
+    let restorable_without_darwin_write_history = libc::O_NONBLOCK
         | libc::O_APPEND
         | libc::O_ASYNC
         | libc::O_SYNC
         | libc::O_DSYNC
         | libc::O_ACCMODE;
     assert_eq!(
-        unsafe { libc::fcntl(pty.slave.as_raw_fd(), libc::F_GETFL) } & restorable,
-        flags & restorable
+        unsafe { libc::fcntl(pty.slave.as_raw_fd(), libc::F_GETFL) }
+            & restorable_without_darwin_write_history,
+        flags & restorable_without_darwin_write_history
     );
     let output = pty.output();
     assert!(output.starts_with(b"\x1b[?1049h"));

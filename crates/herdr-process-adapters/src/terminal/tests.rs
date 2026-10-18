@@ -110,7 +110,6 @@ fn attachment_paste_framing_is_independent_of_child_mode() {
     use std::time::Duration;
     let terminal = Terminal::new(6, 30);
     let attachment = attach(&terminal, 6, 30);
-    // Herdr's public paste path supplies delimiters only when its pane enables them.
     let input = if attachment.screen().bracketed_paste() {
         b"\x1b[200~ak\x1b[201~".as_slice()
     } else {
@@ -179,7 +178,6 @@ fn shared_arrow_shortcuts_route_in_both_terminal_cursor_modes() {
                     }],
                     "{prefix} application={application} split={split}"
                 );
-                // An unmatched key must retain the actual bytes supplied by Herdr.
                 let mut unmatched = prefix_bytes.clone();
                 unmatched.extend([27, arrow, b'C']);
                 let mut forwarded = router.feed(&unmatched, Duration::ZERO);

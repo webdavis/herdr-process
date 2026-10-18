@@ -18,7 +18,6 @@ pub(super) struct Launch {
 }
 fn pipe() -> Result<[OwnedFd; 2]> {
     let mut fds = [-1; 2];
-    // Both descriptors become owned immediately after successful pipe creation.
     ensure!(
         unsafe { libc::pipe(fds.as_mut_ptr()) } == 0,
         "pipe: {}",
@@ -44,8 +43,6 @@ impl Launch {
         let cwd = CString::new(spec.cwd.as_os_str().as_bytes())?;
         let [barrier_read, barrier_write] = pipe()?;
         let [error_read, error_write] = pipe()?;
-        // supervise is an executable-only, single-threaded entry point. Child uses
-        // only native operations and _exit, never Rust unwinding after this fork.
         let pid = unsafe { libc::fork() };
         ensure!(pid >= 0, "fork: {}", std::io::Error::last_os_error());
         if pid == 0 {
@@ -84,7 +81,6 @@ impl Launch {
         })
     }
     pub fn release(&mut self) -> Result<()> {
-        // The child is blocked before exec, so its group cannot disappear here.
         ensure!(
             unsafe { libc::setpgid(self.pid, self.pid) } == 0,
             "configured command group setup"

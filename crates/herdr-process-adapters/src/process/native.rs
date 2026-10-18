@@ -11,8 +11,8 @@ unsafe extern "C" {
     static mach_task_self_: u32;
     fn proc_signal_with_audittoken(token: *mut u32, signal: i32) -> i32;
 }
+const PROC_TTY_ONLY: u32 = 3;
 fn info(pid: i32) -> Result<Option<libc::proc_bsdinfo>> {
-    // proc_pidinfo initializes the entire structure on a successful full-sized read.
     let mut b = unsafe { zeroed::<libc::proc_bsdinfo>() };
     let n = unsafe {
         libc::proc_pidinfo(
@@ -38,7 +38,6 @@ pub(super) struct TerminalJobs {
 }
 impl TerminalJobs {
     pub fn current() -> Result<Self> {
-        // The helper is the unreaped portable-pty session leader.
         let leader = unsafe { libc::getpid() };
         ensure!(
             unsafe { libc::getsid(0) } == leader,
@@ -54,10 +53,9 @@ impl TerminalJobs {
         let mut ids = vec![0i32; 64];
         loop {
             ensure!(Instant::now() < end, "terminal enumeration deadline");
-            // PROC_TTY_ONLY=3 filters in the kernel; result is bytes, not a count.
             let bytes = unsafe {
                 libc::proc_listpids(
-                    3,
+                    PROC_TTY_ONLY,
                     self.device,
                     ids.as_mut_ptr().cast(),
                     (ids.len() * 4) as i32,
@@ -74,14 +72,13 @@ impl TerminalJobs {
             ids.resize(ids.len() * 2, 0);
         }
     }
-    fn signal(&self, pid: i32, signal: i32) -> Result<bool> {
+    fn signal_by_audit_token(&self, pid: i32, signal: i32) -> Result<bool> {
         let Some(before) = info(pid)? else {
             return Ok(false);
         };
         if before.e_tdev != self.device || before.pbi_status == 5 {
             return Ok(false);
         }
-        // Acquire identity before fresh ownership validation. Never signal by a stored PID.
         let mut port = 0;
         let kr = unsafe { task_name_for_pid(mach_task_self_, pid, &mut port) };
         if kr != 0 && info(pid)?.is_none() {
@@ -125,7 +122,7 @@ impl TerminalJobs {
             );
             let members = self.members(end)?;
             for pid in &members {
-                self.signal(*pid, libc::SIGSTOP)?;
+                self.signal_by_audit_token(*pid, libc::SIGSTOP)?;
             }
             let stopped = self.members(end)?;
             let mut stable = true;
@@ -139,7 +136,7 @@ impl TerminalJobs {
             }
             if stable {
                 for pid in stopped {
-                    self.signal(pid, libc::SIGKILL)?;
+                    self.signal_by_audit_token(pid, libc::SIGKILL)?;
                 }
             }
             reap(command, status)?;
@@ -155,7 +152,6 @@ pub(super) fn reap(pid: i32, status: &mut Option<i32>) -> Result<()> {
         return Ok(());
     }
     let mut raw = 0;
-    // Only the direct configured child is waited; the guardian itself stays alive.
     let n = unsafe { libc::waitpid(pid, &mut raw, libc::WNOHANG) };
     if n < 0 {
         let e = std::io::Error::last_os_error();
@@ -174,8 +170,6 @@ pub(super) fn reap(pid: i32, status: &mut Option<i32>) -> Result<()> {
 }
 
 pub(super) fn abort_unstarted(child: &mut (dyn portable_pty::Child + Send + Sync)) -> Result<()> {
-    // Start has never been sent. Keep the direct child unreaped while acquiring
-    // and validating a fresh token; this path can never kill a running guardian.
     if child.try_wait()?.is_some() {
         return Ok(());
     }
@@ -193,6 +187,6 @@ pub(super) fn abort_unstarted(child: &mut (dyn portable_pty::Child + Send + Sync
         leader: pid,
         device: b.e_tdev,
     }
-    .signal(pid, libc::SIGKILL)?;
+    .signal_by_audit_token(pid, libc::SIGKILL)?;
     Ok(())
 }

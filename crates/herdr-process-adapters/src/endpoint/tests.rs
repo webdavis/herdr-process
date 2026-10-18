@@ -40,9 +40,10 @@ fn private_endpoint_serializes_owners_and_connects_without_replacing_live_socket
     }
     drop(first);
     assert!(!endpoint.socket().exists());
-    // Another test in this binary may have forked a child that still holds an
-    // inherited copy of the released lock descriptor until it reaches exec, so
-    // the re-bind is retried for a bounded window rather than asserted once.
+    rebind_once_forked_siblings_drop_the_inherited_lock(&endpoint);
+}
+
+fn rebind_once_forked_siblings_drop_the_inherited_lock(endpoint: &Endpoint) {
     let start = Instant::now();
     while endpoint.bind().unwrap().is_none() {
         assert!(
