@@ -1,27 +1,16 @@
-use herdr_process_domain::{Direction, Target};
 use std::{ffi::OsString, path::PathBuf, process::Command, time::Duration};
 mod arguments;
 mod call;
 mod reply;
 pub use call::HostCall;
+pub use herdr_process_application::{HostFailure, HostFailureCode, HostReply, OpenView};
 use reply::Expected;
-pub use reply::{HostFailure, HostFailureCode, HostReply};
 
 const HOST_DEADLINE: Duration = Duration::from_millis(500);
 
 pub struct Herdr {
     pub binary: PathBuf,
     pub socket: PathBuf,
-}
-
-pub struct OpenView {
-    pub profile: String,
-    pub ticket: String,
-    pub manager_socket: PathBuf,
-    pub cwd: PathBuf,
-    pub width: u8,
-    pub height: u8,
-    pub split: Option<(Target, Direction)>,
 }
 
 impl Herdr {
