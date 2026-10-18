@@ -81,5 +81,4 @@ pub(super) fn wait(watch: impl FnOnce(&mut Readiness), end: Instant) -> Result<(
 }
 
 #[cfg(test)]
-#[path = "tests/control.rs"]
 mod tests;

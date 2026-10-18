@@ -34,7 +34,6 @@ impl AttachmentTerminal {
         let input = File::from(input.try_clone_to_owned()?);
         let output = File::from(output.try_clone_to_owned()?);
         let mut original = unsafe { std::mem::zeroed() };
-        // Both descriptors remain owned for every native call and restoration.
         check(unsafe { libc::tcgetattr(input.as_raw_fd(), &mut original) })?;
         let input_flags = check(unsafe { libc::fcntl(input.as_raw_fd(), libc::F_GETFL) })?;
         let output_flags = check(unsafe { libc::fcntl(output.as_raw_fd(), libc::F_GETFL) })?;

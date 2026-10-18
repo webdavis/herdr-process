@@ -14,8 +14,10 @@ pub use startup_watch::StartupWatch;
 mod config;
 mod manifest;
 pub use config::{Configuration, ConfigurationPaths, resolve_configuration_paths};
+#[cfg(target_os = "macos")]
 mod process;
 pub use portable_pty::PtySize;
+#[cfg(target_os = "macos")]
 pub use process::{SupervisedProcess, Supervisor, supervise};
 mod tickets;
 pub use tickets::RandomTickets;
