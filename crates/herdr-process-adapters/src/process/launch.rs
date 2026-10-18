@@ -33,7 +33,7 @@ fn pipe() -> Result<[OwnedFd; 2]> {
     Ok(pair)
 }
 impl Launch {
-    pub fn fork(spec: &Command, control_fd: i32) -> Result<Self> {
+    pub fn fork_in_single_threaded_guardian(spec: &Command, control_fd: i32) -> Result<Self> {
         let argv: Vec<CString> = std::iter::once(&spec.program)
             .chain(spec.args.iter())
             .map(|s| CString::new(s.as_bytes()))

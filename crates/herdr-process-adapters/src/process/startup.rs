@@ -41,12 +41,18 @@ impl Startup {
         listener.set_nonblocking(true)?;
         let secret = unix::random_hex(16);
         let pair = native_pty_system().openpty(size)?;
-        let fd = pair
+        let fd_shared_by_reader_and_writer = pair
             .master
             .as_raw_fd()
             .ok_or_else(|| anyhow::anyhow!("native PTY descriptor unavailable"))?;
         ensure!(
-            unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) } == 0,
+            unsafe {
+                libc::fcntl(
+                    fd_shared_by_reader_and_writer,
+                    libc::F_SETFL,
+                    libc::O_NONBLOCK,
+                )
+            } == 0,
             "nonblocking PTY: {}",
             std::io::Error::last_os_error()
         );

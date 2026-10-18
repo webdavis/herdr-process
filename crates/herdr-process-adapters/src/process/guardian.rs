@@ -39,7 +39,7 @@ pub fn supervise(args: &[String]) -> Result<i32> {
         }
     }
     let jobs = TerminalJobs::current()?;
-    let mut child = Launch::fork(&spec, control.stream.as_raw_fd())?;
+    let mut child = Launch::fork_in_single_threaded_guardian(&spec, control.stream.as_raw_fd())?;
     let mut guard = Cleanup {
         jobs,
         pid: child.pid,
