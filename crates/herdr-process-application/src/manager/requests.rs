@@ -26,7 +26,7 @@ impl<P: Ports> Manager<P> {
                 anyhow::ensure!(role == Role::Fresh, "connection already assigned");
                 anyhow::ensure!(
                     configuration == self.settings.identity,
-                    "configuration changed; retry with the current configuration"
+                    "configuration changed; kill the running processes to load it"
                 );
                 anyhow::ensure!(
                     self.settings.profiles.contains_key(&profile),

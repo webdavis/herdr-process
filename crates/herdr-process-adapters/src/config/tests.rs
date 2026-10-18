@@ -107,44 +107,6 @@ fn selected_paths_follow_release_xdg_and_verbatim_override() {
 }
 
 #[test]
-fn identity_tracks_validated_profile_and_binding_sources() {
-    let home = Path::new("/private/home");
-    let original = Configuration::parse(PROFILES, HERDR, home).unwrap();
-    assert!(!original.identity().is_empty());
-    assert_eq!(
-        original.identity(),
-        Configuration::parse(PROFILES, HERDR, home)
-            .unwrap()
-            .identity()
-    );
-    for changed in [
-        PROFILES.replace("80%", "81%"),
-        PROFILES.replace("editor", "other"),
-        PROFILES.replace("hide", "quit"),
-        PROFILES.replace("projects", "elsewhere"),
-    ] {
-        assert_ne!(
-            original.identity(),
-            Configuration::parse(&changed, HERDR, home)
-                .unwrap()
-                .identity()
-        );
-    }
-    assert_ne!(
-        original.identity(),
-        Configuration::parse(PROFILES, "[keys]\nprefix='ctrl+d'", home)
-            .unwrap()
-            .identity()
-    );
-    assert_ne!(
-        original.identity(),
-        Configuration::parse(PROFILES, HERDR, Path::new("/private/other-home"))
-            .unwrap()
-            .identity()
-    );
-}
-
-#[test]
 fn forty_profiles_invoke_all_four_native_manifest_actions_from_focused_input() {
     use herdr_process_application::{Effect, InputRouter};
     use herdr_process_domain::Action;
@@ -199,6 +161,7 @@ fn forty_profiles_invoke_all_four_native_manifest_actions_from_focused_input() {
     assert!(started.elapsed() < Duration::from_secs(1));
 }
 
+mod identity;
 mod validation;
 
 mod chords;

@@ -7,6 +7,7 @@ use fakes::{FakeHost, FakeProcesses, Fakes};
 use herdr_process_domain::Direction;
 use world::{World, target};
 mod busy_retry;
+mod configuration;
 mod ctrl_c;
 mod float_replacement;
 mod focus;
