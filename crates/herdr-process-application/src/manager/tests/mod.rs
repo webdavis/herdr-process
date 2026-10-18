@@ -15,3 +15,4 @@ mod focus;
 mod kill;
 mod split;
 mod toggle_float;
+mod wakeups;

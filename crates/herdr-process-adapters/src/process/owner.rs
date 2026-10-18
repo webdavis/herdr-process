@@ -134,7 +134,7 @@ impl SupervisedProcess {
             if self.poll_exit()?.is_some() {
                 return Ok(());
             }
-            super::control::wait(-1, 0, end)?;
+            super::control::wait(|_| {}, end)?;
         }
     }
 }

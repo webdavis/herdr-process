@@ -68,8 +68,7 @@ pub fn supervise(args: &[String]) -> Result<i32> {
                 Err(_) => return Ok(()), // EOF and malformed control both revoke ownership input.
             }
             super::control::wait(
-                control.stream.as_raw_fd(),
-                libc::POLLIN,
+                |readiness| readiness.readable(control.stream.as_raw_fd()),
                 Instant::now() + Duration::from_millis(10),
             )?;
         }

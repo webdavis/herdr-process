@@ -33,7 +33,6 @@ pub enum HostFailureCode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostFailure {
     pub code: HostFailureCode,
-    pub message: &'static str,
 }
 
 impl HostFailure {
@@ -41,16 +40,13 @@ impl HostFailure {
         self.code == HostFailureCode::UiBusy
     }
     pub fn new(code: HostFailureCode) -> Self {
-        Self {
-            code,
-            message: "Herdr host call failed",
-        }
+        Self { code }
     }
 }
 
 impl std::fmt::Display for HostFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({:?})", self.message, self.code)
+        write!(f, "Herdr host call failed ({:?})", self.code)
     }
 }
 

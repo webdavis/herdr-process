@@ -53,7 +53,7 @@ impl<P: Ports> Manager<P> {
         let elapsed = self.elapsed();
         let ids: Vec<_> = self.clients.keys().copied().collect();
         for id in ids {
-            if matches!(self.clients[&id].role, Role::Retiring(since) if self.now.saturating_duration_since(since) >= Duration::from_millis(500))
+            if matches!(self.clients[&id].role, Role::Retiring(since) if self.now >= since + RETIRE_GRACE)
             {
                 self.remove_client(id);
                 continue;

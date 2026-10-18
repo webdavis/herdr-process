@@ -21,6 +21,7 @@ use std::{
 use transitions::{Candidate, Command, Origin, Stage, Step, Transition};
 
 const TICK: Duration = Duration::from_millis(10);
+const RETIRE_GRACE: Duration = Duration::from_millis(500);
 
 pub struct Settings {
     pub identity: String,
@@ -91,8 +92,26 @@ impl<P: Ports> Manager<P> {
     }
 
     pub fn timeout(&self) -> Option<Duration> {
-        let timers = self.pending.is_some() || !self.clients.is_empty() || !self.queue.is_empty();
-        timers.then_some(TICK)
+        self.next_deadline()
+            .map(|deadline| deadline.saturating_duration_since(self.now))
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        let host_call = self.pending.as_ref().map(|_| self.now + TICK);
+        let blocked_work = (self.pending.is_none() && !self.queue.is_empty()).then_some(self.now);
+        let clients = self
+            .clients
+            .values()
+            .filter_map(|client| match &client.role {
+                Role::Retiring(since) => Some(*since + RETIRE_GRACE),
+                Role::Active(_) => client.router.deadline().map(|at| self.epoch + at),
+                _ => None,
+            });
+        host_call
+            .into_iter()
+            .chain(blocked_work)
+            .chain(clients)
+            .min()
     }
 
     pub fn connections(&self) -> impl Iterator<Item = &P::Connection> {

@@ -1,5 +1,5 @@
 use anyhow::{Result, bail, ensure};
-use herdr_process_adapters::{AttachmentTerminal, Peer};
+use herdr_process_adapters::{AttachmentTerminal, Peer, Readiness};
 use herdr_process_protocol::{MAX_FRAME, Request, Response};
 use notice::Notice;
 use std::{
@@ -34,7 +34,7 @@ pub(super) fn run(
     let deadline = Instant::now() + timeout;
     let mut phase = Phase::Screen;
     let mut screens = Screens::default();
-    let mut saw_screen = false;
+    let mut screen: Option<Vec<u8>> = None;
     let mut notice: Option<Notice> = None;
     loop {
         ensure!(
@@ -48,13 +48,13 @@ pub(super) fn run(
         for response in responses {
             match response {
                 Response::Screen { bytes } => {
-                    saw_screen = true;
-                    screens.push(bytes)?;
+                    screens.push(bytes.clone())?;
+                    screen = Some(bytes);
                     if let Some(notice) = &notice {
                         screens.push(notice.render(size))?;
                     }
                 }
-                Response::Attached {} if phase == Phase::Screen && saw_screen => {
+                Response::Attached {} if phase == Phase::Screen && screen.is_some() => {
                     phase = Phase::Replay
                 }
                 Response::Ack {} if phase == Phase::Acknowledgement && peer.is_idle() => {
@@ -72,9 +72,9 @@ pub(super) fn run(
         }
         if notice
             .as_ref()
-            .is_some_and(|shown| shown.expired(Instant::now()))
+            .is_some_and(|shown| Instant::now() >= shown.until())
         {
-            screens.push(Notice::erase(size))?;
+            screens.push(screen.clone().unwrap_or_default())?;
             notice = None;
         }
         screens.write(terminal)?;
@@ -97,7 +97,22 @@ pub(super) fn run(
                 _ => {}
             }
         }
-        std::thread::sleep(Duration::from_millis(1));
+        let mut readiness = Readiness::default();
+        peer.watch(&mut readiness);
+        terminal.watch(
+            &mut readiness,
+            phase == Phase::Active && peer.is_idle(),
+            !screens.is_empty(),
+        );
+        let handshake = (phase != Phase::Active).then_some(deadline);
+        match handshake
+            .into_iter()
+            .chain(notice.as_ref().map(Notice::until))
+            .min()
+        {
+            Some(until) => readiness.wait_until(until)?,
+            None => readiness.wait(None)?,
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use super::Command;
-use crate::unix;
+use crate::{Readiness, unix};
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -39,7 +39,7 @@ impl Control {
             match unix::ready(self.stream.write(&bytes[offset..]))? {
                 Some(0) => bail!("guardian control write closed"),
                 Some(n) => offset += n,
-                None => wait(self.stream.as_raw_fd(), libc::POLLOUT, end)?,
+                None => wait(|readiness| readiness.writable(self.stream.as_raw_fd()), end)?,
             }
         }
         Ok(())
@@ -66,29 +66,19 @@ impl Control {
             if let Some(message) = self.receive()? {
                 return Ok(message);
             }
-            wait(self.stream.as_raw_fd(), libc::POLLIN, end)?;
+            wait(|readiness| readiness.readable(self.stream.as_raw_fd()), end)?;
         }
     }
 }
-pub(super) fn wait(fd: i32, events: i16, end: Instant) -> Result<()> {
+pub(super) fn wait(watch: impl FnOnce(&mut Readiness), end: Instant) -> Result<()> {
     ensure!(Instant::now() < end, "guardian deadline exceeded");
+    let mut readiness = Readiness::default();
+    watch(&mut readiness);
     let timeout = end
         .saturating_duration_since(Instant::now())
-        .as_millis()
-        .min(5) as i32;
-    let mut p = libc::pollfd {
-        fd,
-        events,
-        revents: 0,
-    };
-    // The descriptor is borrowed from an owner that remains alive throughout poll.
-    let n = unsafe { libc::poll(&mut p, 1, timeout) };
-    if n < 0 && std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
-        bail!(std::io::Error::last_os_error());
-    }
-    Ok(())
+        .min(Duration::from_millis(5));
+    Ok(readiness.wait(Some(timeout))?)
 }
 
 #[cfg(test)]
-#[path = "tests/control.rs"]
 mod tests;

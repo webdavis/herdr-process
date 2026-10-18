@@ -1,6 +1,6 @@
 use crate::{arguments::Options, environment};
 use anyhow::{Result, bail, ensure};
-use herdr_process_adapters::{Endpoint, Peer};
+use herdr_process_adapters::{Endpoint, Peer, Readiness};
 use herdr_process_domain::Action;
 use herdr_process_protocol::{Request, Response};
 use std::time::{Duration, Instant};
@@ -86,7 +86,9 @@ fn exchange(peer: &mut Peer, request: &Request, timeout: Duration) -> Result<()>
                 _ => bail!("unexpected manager response; action result is unknown"),
             }
         }
-        std::thread::sleep(Duration::from_millis(1));
+        let mut readiness = Readiness::default();
+        peer.watch(&mut readiness);
+        readiness.wait_until(deadline)?;
     }
 }
 #[cfg(test)]
