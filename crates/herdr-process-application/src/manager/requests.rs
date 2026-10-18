@@ -35,7 +35,7 @@ impl<P: Ports> Manager<P> {
                 anyhow::ensure!(self.queue.len() < 128, "request queue full; retry");
                 self.clients.get_mut(&id).unwrap().role = Role::Controller;
                 self.queue.push_back(Work::Command(Command {
-                    reply: Some(id),
+                    origin: Origin::Controller(id),
                     profile,
                     action,
                     target,

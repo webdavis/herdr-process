@@ -1,11 +1,13 @@
 use anyhow::{Result, bail, ensure};
 use herdr_process_adapters::{AttachmentTerminal, Peer};
 use herdr_process_protocol::{MAX_FRAME, Request, Response};
+use notice::Notice;
 use std::{
     collections::VecDeque,
     io,
     time::{Duration, Instant},
 };
+mod notice;
 
 #[derive(PartialEq)]
 enum Phase {
@@ -33,6 +35,7 @@ pub(super) fn run(
     let mut phase = Phase::Screen;
     let mut screens = Screens::default();
     let mut saw_screen = false;
+    let mut notice: Option<Notice> = None;
     loop {
         ensure!(
             phase == Phase::Active || Instant::now() < deadline,
@@ -47,6 +50,9 @@ pub(super) fn run(
                 Response::Screen { bytes } => {
                     saw_screen = true;
                     screens.push(bytes)?;
+                    if let Some(notice) = &notice {
+                        screens.push(notice.render(Instant::now(), size))?;
+                    }
                 }
                 Response::Attached {} if phase == Phase::Screen && saw_screen => {
                     phase = Phase::Replay
@@ -55,6 +61,11 @@ pub(super) fn run(
                     phase = Phase::Active
                 }
                 Response::Retire {} => return Ok(()),
+                Response::Error { message } if phase == Phase::Active => {
+                    let shown = Notice::new(message, Instant::now());
+                    screens.push(shown.render(Instant::now(), size))?;
+                    notice = Some(shown);
+                }
                 Response::Error { message } => bail!("{message}"),
                 _ => bail!("unexpected attachment handshake response"),
             }

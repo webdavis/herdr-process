@@ -1,8 +1,13 @@
 use super::*;
 mod actions;
 mod opening;
+#[derive(Clone, Copy)]
+pub(super) enum Origin {
+    Controller(usize),
+    Attachment(usize),
+}
 pub(super) struct Command {
-    pub reply: Option<usize>,
+    pub origin: Origin,
     pub profile: String,
     pub action: Action,
     pub target: Target,
@@ -99,16 +104,15 @@ impl<P: Ports> Manager<P> {
     }
     pub(super) fn finish(&mut self, command: &Command, result: anyhow::Result<()>) {
         self.completed = true;
-        let response = match result {
-            Ok(()) => Response::Ack {},
-            Err(error) => Response::Error {
-                message: format!("{} {}: {error}", command.profile, command.action),
-            },
+        let error = |error| Response::Error {
+            message: format!("{} {}: {error}", command.profile, command.action),
         };
-        if let Some(id) = command.reply {
-            self.send(id, response);
-        } else if let Response::Error { message } = response {
-            eprintln!("{message}");
+        match (command.origin, result) {
+            (Origin::Controller(id), Ok(())) => self.send(id, Response::Ack {}),
+            (Origin::Controller(id), Err(e)) | (Origin::Attachment(id), Err(e)) => {
+                self.send(id, error(e))
+            }
+            (Origin::Attachment(_), Ok(())) => {}
         }
     }
 }

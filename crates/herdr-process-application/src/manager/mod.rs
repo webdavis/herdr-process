@@ -18,7 +18,7 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-use transitions::{Candidate, Command, Stage, Step, Transition};
+use transitions::{Candidate, Command, Origin, Stage, Step, Transition};
 
 const TICK: Duration = Duration::from_millis(10);
 
