@@ -54,6 +54,9 @@ impl InputRouter {
         }
         effects
     }
+    pub fn deadline(&self) -> Option<Duration> {
+        (!self.pending.is_empty() || self.paste.holding()).then(|| self.last + CHORD_TIMEOUT)
+    }
     pub fn expire(&mut self, now: Duration) -> Vec<Effect> {
         let mut effects = Vec::new();
         if now.saturating_sub(self.last) >= CHORD_TIMEOUT {

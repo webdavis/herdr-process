@@ -45,6 +45,9 @@ impl Paste {
         self.sent = 0;
         PasteInput::Keys(remaining)
     }
+    pub(super) fn holding(&self) -> bool {
+        self.candidate.len() > self.sent
+    }
     pub(super) fn flush(&mut self) -> Vec<u8> {
         let remaining = self.candidate[self.sent..].to_vec();
         self.sent = self.candidate.len();
