@@ -178,3 +178,5 @@ fn send(server: &mut UnixStream, response: &Response) {
         .write_all(&herdr_process_protocol::encode(response).unwrap())
         .unwrap();
 }
+
+mod notices;

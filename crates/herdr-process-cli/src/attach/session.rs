@@ -51,7 +51,7 @@ pub(super) fn run(
                     saw_screen = true;
                     screens.push(bytes)?;
                     if let Some(notice) = &notice {
-                        screens.push(notice.render(Instant::now(), size))?;
+                        screens.push(notice.render(size))?;
                     }
                 }
                 Response::Attached {} if phase == Phase::Screen && saw_screen => {
@@ -63,12 +63,19 @@ pub(super) fn run(
                 Response::Retire {} => return Ok(()),
                 Response::Error { message } if phase == Phase::Active => {
                     let shown = Notice::new(message, Instant::now());
-                    screens.push(shown.render(Instant::now(), size))?;
+                    screens.push(shown.render(size))?;
                     notice = Some(shown);
                 }
                 Response::Error { message } => bail!("{message}"),
                 _ => bail!("unexpected attachment handshake response"),
             }
+        }
+        if notice
+            .as_ref()
+            .is_some_and(|shown| shown.expired(Instant::now()))
+        {
+            screens.push(Notice::erase(size))?;
+            notice = None;
         }
         screens.write(terminal)?;
         if phase == Phase::Replay && screens.is_empty() {
