@@ -49,6 +49,14 @@ fn nonzero_exit_and_stderr_fail_without_secret_text() {
 }
 
 #[test]
+fn a_structured_api_error_wins_over_stderr() {
+    let script = "printf '%s' \"$1\"; printf 'noise' >&2";
+    let rejected = r#"{"id":"request","error":{"code":"denied","message":"no"}}"#;
+    let failure = finish(&mut shell(script, rejected, HANG_BOUND)).unwrap_err();
+    assert_eq!(failure.code, HostFailureCode::Rejected);
+}
+
+#[test]
 fn combined_output_cap_is_enforced_at_boundary() {
     for (length, oversized) in [(65535, false), (65536, false), (65537, true)] {
         let padded = format!("{POPUP}{}", " ".repeat(length - POPUP.len()));
