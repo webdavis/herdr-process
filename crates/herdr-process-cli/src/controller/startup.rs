@@ -1,6 +1,6 @@
 use crate::environment::Environment;
 use anyhow::{Context, Result, bail, ensure};
-use herdr_process_adapters::{Endpoint, Herdr, Peer};
+use herdr_process_adapters::{Endpoint, Herdr, Peer, StartupWatch};
 use std::{
     fs::{File, OpenOptions},
     io,
@@ -104,12 +104,14 @@ pub(super) fn connect(
     }
     let deadline = Instant::now() + timeout;
     let log = StartupLog::create(&launch.runtime)?;
+    let mut watch = StartupWatch::new(&launch.runtime, &log.file)?;
     let child = launch
         .command
         .stderr(log.file.try_clone()?)
         .process_group(0)
         .spawn()
         .context("manager startup failed")?;
+    watch.child(child.id())?;
     let mut candidate = Some(Candidate {
         child,
         unstarted: true,
@@ -141,7 +143,8 @@ pub(super) fn connect(
             log.remove();
             return Ok(Connection { peer, candidate });
         }
-        std::thread::sleep(Duration::from_millis(1));
+        let retry = Instant::now() + Duration::from_millis(10);
+        watch.wait_until(if ready { deadline.min(retry) } else { deadline })?;
     }
 }
 fn available(endpoint: &Endpoint) -> Result<Option<Peer>> {

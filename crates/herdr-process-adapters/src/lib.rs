@@ -6,8 +6,10 @@ pub use transport::Peer;
 mod endpoint;
 pub use endpoint::{Endpoint, Listener};
 mod readiness;
+mod startup_watch;
 mod unix;
 pub use readiness::Readiness;
+pub use startup_watch::StartupWatch;
 
 mod config;
 mod manifest;
