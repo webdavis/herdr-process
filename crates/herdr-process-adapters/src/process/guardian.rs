@@ -24,14 +24,7 @@ pub fn supervise(args: &[String]) -> Result<i32> {
     let Message::Start(spec) = control.until(Instant::now() + Duration::from_millis(300))? else {
         bail!("expected guardian start");
     };
-    // This entry point must run before the helper creates any threads. Do not call
-    // it inside the manager. The CLI dispatches directly to it in a fresh process.
-    for (name, _) in std::env::vars_os() {
-        if super::startup::private_variable(&name) {
-            unsafe { std::env::remove_var(name) };
-        }
-    }
-    unsafe { std::env::set_var("TERM", "xterm-256color") };
+    scrub_environment_before_any_thread_exists();
     unsafe {
         for signal in [
             libc::SIGHUP,
@@ -65,7 +58,7 @@ pub fn supervise(args: &[String]) -> Result<i32> {
                 Ok(Some(Message::Stop)) => return Ok(()),
                 Ok(None) => (),
                 Ok(Some(_)) => bail!("unexpected guardian request"),
-                Err(_) => return Ok(()), // EOF and malformed control both revoke ownership input.
+                Err(_) => return Ok(()),
             }
             super::control::wait(
                 |readiness| readiness.readable(control.stream.as_raw_fd()),
@@ -85,6 +78,15 @@ pub fn supervise(args: &[String]) -> Result<i32> {
     let _ = control.send(Message::Exit(status));
     Ok(0)
 }
+fn scrub_environment_before_any_thread_exists() {
+    for (name, _) in std::env::vars_os() {
+        if super::startup::private_variable(&name) {
+            unsafe { std::env::remove_var(name) };
+        }
+    }
+    unsafe { std::env::set_var("TERM", "xterm-256color") };
+}
+
 struct Cleanup {
     jobs: TerminalJobs,
     pid: i32,

@@ -15,32 +15,11 @@ import time
 import unittest
 
 BINARY = os.path.abspath(sys.argv.pop(1))
-# Deliberately /tmp, not TMPDIR: these roots hold Unix sockets, whose
-# absolute path must fit SUN_LEN, and the per-user temporary directory on
-# macOS already spends most of that budget (mirrors the Rust TempRoot).
-ROOT = Path('/tmp')
-# THE HANG BOUND, and the only reason any wait below carries a clock at all.
-# Every one of them has a real signal to wait for: a readiness line, a
-# protocol frame, a screen suffix, a process exit. The clock stops a hang and
-# measures nothing, so it sits far past anything contention can reach. The
-# whole suite runs in under half a second idle, and the slowest single test
-# measured over fifty runs on a fully saturated machine was a fifth of a
-# second.
+SOCKET_SAFE_ROOT = Path('/tmp')
 HANG_BOUND = 5
-# A QUIET WINDOW: how long the product is watched to prove it sends nothing
-# yet. This one is load bearing and stays small deliberately. Load can only
-# make the product slower, which is the direction that keeps the window
-# quiet, so a busy machine cannot turn it into a failure.
 QUIET_WINDOW = .015
-# How often a blocked read looks again. A tick, not a budget.
 TICK = .01
-# The REVIEW line. Every test here is milliseconds of work, so one past a
-# second has earned a look, and the printed reading is how it gets one.
 SPEED_REPORT = 1
-# The whole-test backstop, which bounds a hang in a wait nobody bounded
-# rather than reading a speed: wall time under a parallel runner is
-# contention and not cost. It sits above HANG_BOUND on purpose, so a hung
-# wait fails on its own assertion and says which one.
 SPEED_CEILING = 30
 
 
@@ -48,7 +27,7 @@ class Composition(unittest.TestCase):
     def setUp(self):
         self.start = time.monotonic()
         import tempfile
-        self.root = Path(tempfile.mkdtemp(prefix='cli-', dir=ROOT))
+        self.root = Path(tempfile.mkdtemp(prefix='cli-', dir=SOCKET_SAFE_ROOT))
         self.env = {'HOME': str(self.root), 'PATH': '/usr/bin:/bin', 'TMPDIR': str(self.root)}
         self.children = []
         self.resources = contextlib.ExitStack()
@@ -76,10 +55,6 @@ class Composition(unittest.TestCase):
         return child
 
     def readiness_line(self, child):
-        # A pipe read returns what has ARRIVED, not what was written, so a
-        # single os.read can hand back a fragment of the readiness line under
-        # load (measured on a CI runner: b'herdr-process:'). Read until the
-        # newline, bounded by the hang bound rather than by a byte count.
         line = b''
         deadline = time.monotonic() + HANG_BOUND
         while not line.endswith(b'\n'):
@@ -111,8 +86,13 @@ class Composition(unittest.TestCase):
         self.env['HERDR_CONFIG_PATH'] = str(marker)
         code, out, err = self.run_cli(['--help'])
         self.assertEqual(code, 0, err)
-        self.assertIn(b'generate --output DIRECTORY', out)
-        self.assertIn(b'action PROFILE split-right|split-below|toggle-float|kill', out)
+        self.assertIn(b'generate --output DIRECTORY [--profiles FILE] [--herdr-config FILE]\n'
+                      b'      Write herdr-plugin.toml to DIRECTORY with four actions for each'
+                      b' profile.\n', out)
+        self.assertIn(b'action PROFILE ACTION [--profiles FILE] [--herdr-config FILE]\n'
+                      b'      Run ACTION for PROFILE: split-right, split-below, toggle-float'
+                      b' or kill.\n', out)
+        self.assertIn(b'Default: processes.toml next to the herdr config.', out)
         self.assertNotIn(b'supervise', out)
 
     def test_invalid_arguments_and_invalid_utf8_exit_two(self):
@@ -225,7 +205,6 @@ class Composition(unittest.TestCase):
         server.listen(1)
         server.settimeout(HANG_BOUND)
         master, slave = os.openpty()
-        # Close the master first; an unread slave output queue must not delay teardown.
         self.resources.callback(os.close, slave)
         self.resources.callback(os.close, master)
         original = termios.tcgetattr(slave)
@@ -245,18 +224,14 @@ class Composition(unittest.TestCase):
 
     def assert_restored(self, slave, original, flags):
         actual = termios.tcgetattr(slave)
-        # Darwin reports transient pending canonical input after restoration.
-        actual[3] &= ~termios.PENDIN
-        original[3] &= ~termios.PENDIN
+        without_darwin_pending_input = ~termios.PENDIN
+        actual[3] &= without_darwin_pending_input
+        original[3] &= without_darwin_pending_input
         self.assertEqual(actual, original)
         restorable = os.O_NONBLOCK | os.O_APPEND | os.O_ASYNC | os.O_SYNC | os.O_ACCMODE
         self.assertEqual(fcntl.fcntl(slave, fcntl.F_GETFL) & restorable, flags & restorable)
 
     def read_terminal(self, master, suffix):
-        # THE SUFFIX IS THE SIGNAL. Draining a screen through a pseudoterminal
-        # takes as many round trips as the kernel buffer needs, so the only
-        # honest end of this loop is the suffix arriving; the deadline stops a
-        # hang when it never will.
         output = b''
         deadline = time.monotonic() + HANG_BOUND
         while suffix not in output:

@@ -45,7 +45,6 @@ impl Startup {
             .master
             .as_raw_fd()
             .ok_or_else(|| anyhow::anyhow!("native PTY descriptor unavailable"))?;
-        // Cloned portable-pty descriptors share this nonblocking file description.
         ensure!(
             unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) } == 0,
             "nonblocking PTY: {}",
@@ -139,7 +138,6 @@ impl Drop for Startup {
         {
             eprintln!("unstarted guardian cleanup incomplete: {e:#}");
         }
-        // EOF takes the guardian's normal terminal cleanup path.
         if let Err(e) = self.reap(Instant::now() + Duration::from_millis(600)) {
             eprintln!("guardian reaping incomplete: {e:#}");
         }

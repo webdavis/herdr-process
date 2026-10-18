@@ -17,6 +17,7 @@ ctrl_c = 'quit'
     .unwrap();
     let manifest: toml::Value = toml::from_str(&config.render_manifest().unwrap()).unwrap();
     assert_eq!(manifest["id"].as_str(), Some("herdr-process"));
+    assert_eq!(manifest["name"].as_str(), Some("herdr-process"));
     assert_eq!(manifest["min_herdr_version"].as_str(), Some("0.9.0"));
     assert_eq!(
         manifest["platforms"].as_array().unwrap(),
@@ -29,11 +30,14 @@ ctrl_c = 'quit'
     assert_eq!(attach, ["./target/release/herdr-process", "attach"]);
     let actions = manifest["actions"].as_array().unwrap();
     assert_eq!(actions.len(), 4);
-    for (row, action) in actions
-        .iter()
-        .zip(["split-right", "split-below", "toggle-float", "kill"])
-    {
+    for (row, (action, title)) in actions.iter().zip([
+        ("split-right", "Open work in a split to the right"),
+        ("split-below", "Open work in a split below"),
+        ("toggle-float", "Show or hide work in a float"),
+        ("kill", "Kill the work process"),
+    ]) {
         assert_eq!(row["id"].as_str().unwrap(), format!("work:{action}"));
+        assert_eq!(row["title"].as_str(), Some(title));
         let command: Vec<String> = row["command"].clone().try_into().unwrap();
         assert_eq!(
             command,

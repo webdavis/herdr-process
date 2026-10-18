@@ -58,7 +58,6 @@ impl SupervisedProcess {
             matches!(self.state, State::Running),
             "configured command input revoked"
         );
-        // One nonblocking syscall, bounded chunk; caller retains unsent bytes.
         Ok(self
             .startup
             .writer
@@ -143,6 +142,5 @@ impl Drop for SupervisedProcess {
         if let Err(error) = self.terminate() {
             eprintln!("process termination incomplete: {error:#}");
         }
-        // Startup closes control and waits even if terminate returned an error.
     }
 }

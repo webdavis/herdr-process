@@ -13,7 +13,6 @@ fn stalled_handshake_is_bounded_and_does_not_forward_input() {
     let start = Instant::now();
     let mut master = -1;
     let mut slave = -1;
-    // Both descriptors are immediately owned; neither refers to the operator terminal.
     assert_eq!(
         unsafe {
             libc::openpty(

@@ -75,7 +75,6 @@ impl Call for HostCall {
                 Err(error) => Err(error.clone()),
                 Ok(None) => unreachable!(),
             });
-            // Error outcomes stop the exact child immediately; Drop performs the reap.
             if result.is_err() {
                 let _ = self.child.kill();
             }
@@ -108,7 +107,6 @@ impl HostCall {
         if !status.success() || (self.output.is_empty() && !self.errors.is_empty()) {
             return Err(HostFailure::new(HostFailureCode::Exit));
         }
-        // A structured API failure is authoritative even if stderr also contains diagnostics.
         let reply = self.expected.decode(&self.output)?;
         if !self.errors.is_empty() {
             return Err(HostFailure::new(HostFailureCode::Exit));
@@ -119,7 +117,6 @@ impl HostCall {
 
 impl Drop for HostCall {
     fn drop(&mut self) {
-        // Child caches a reaped status, so kill cannot target a reused process ID.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -127,12 +124,10 @@ impl Drop for HostCall {
 
 fn nonblocking(pipe: &impl AsRawFd) -> io::Result<()> {
     let fd = pipe.as_raw_fd();
-    // SAFETY: the owned pipe remains alive throughout both descriptor operations.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
     if flags < 0 {
         return Err(io::Error::last_os_error());
     }
-    // SAFETY: preserve the existing flags and only add nonblocking mode on this pipe.
     if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
         return Err(io::Error::last_os_error());
     }

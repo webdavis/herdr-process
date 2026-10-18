@@ -10,7 +10,6 @@ impl Directory {
     pub fn create() -> Result<Self> {
         let path = std::env::temp_dir().join("g-XXXXXX");
         let mut bytes = CString::new(path.as_os_str().as_bytes())?.into_bytes_with_nul();
-        // mkdtemp atomically creates a new directory with mode 0700.
         ensure!(
             !unsafe { libc::mkdtemp(bytes.as_mut_ptr().cast()) }.is_null(),
             "private guardian directory: {}",

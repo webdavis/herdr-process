@@ -26,7 +26,6 @@ fn oversized_complete_frame_is_rejected() -> Result<()> {
     let mut control = Control::new(stream)?;
     let mut bytes = serde_json::to_vec(&Message::Failure("x".repeat(65530)))?;
     bytes.push(b'\n');
-    // Feed bounded chunks and consume them, never depend on socket buffer size.
     for chunk in bytes.chunks(4095) {
         peer.write_all(chunk)?;
         match control.receive() {

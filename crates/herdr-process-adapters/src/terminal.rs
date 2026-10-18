@@ -1,4 +1,6 @@
 use herdr_process_application::Screen;
+const PASTE_FRAMING_ON_MOUSE_REPORTING_OFF: &[u8] =
+    b"\x1b[?2004h\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l";
 pub struct Terminal {
     parser: vt100::Parser<Responses>,
 }
@@ -25,9 +27,7 @@ impl Screen for Terminal {
 
     fn snapshot(&self) -> Vec<u8> {
         let screen = self.parser.screen();
-        // The attachment owns paste framing; child input modes are projected separately.
-        let mut bytes =
-            b"\x1b[?2004h\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l".to_vec();
+        let mut bytes = PASTE_FRAMING_ON_MOUSE_REPORTING_OFF.to_vec();
         bytes.extend_from_slice(if screen.application_keypad() {
             b"\x1b="
         } else {

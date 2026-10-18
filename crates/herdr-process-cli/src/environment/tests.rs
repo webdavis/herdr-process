@@ -126,6 +126,17 @@ fn context_must_be_an_object_when_supplied() {
     }
 }
 #[test]
+fn context_errors_spell_herdr_in_lower_case() {
+    let error = |context: &str| {
+        target(values(&[("HERDR_PLUGIN_CONTEXT_JSON", context)]))
+            .unwrap_err()
+            .to_string()
+    };
+    assert_eq!(error("{"), "invalid herdr context");
+    assert_eq!(error("[]"), "invalid herdr context object");
+    assert_eq!(error("{\"workspace_id\": 1}"), "invalid herdr target field");
+}
+#[test]
 fn runtime_key_is_pinned() {
     let parts = [
         OsStr::new("/private/host.sock"),

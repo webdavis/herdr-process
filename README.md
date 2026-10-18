@@ -1,33 +1,51 @@
 # herdr-process
 
-[herdr](https://herdr.dev)-owned windows for long-lived processes. A profile names a program, and
-the plugin keeps one instance of it alive, attaches a herdr pane to it on demand, and lets that pane
-be closed, split or floated without the program noticing. The process outlives the window.
-
-Each profile gets its own set of actions (`<profile>:toggle-float`, `<profile>:split-right`,
-`<profile>:split-below`, `<profile>:kill`), bound with `type = "plugin_action"` keybindings.
+A [herdr](https://herdr.dev) plugin that keeps one long-lived process per profile and shows it in a
+herdr pane on demand. Closing, splitting or floating the pane leaves the process running.
 
 ## Install
 
-**This plugin ships no `herdr-plugin.toml`, so `herdr plugin install` cannot install it.** The
-actions are one set per declared profile, so the manifest is a function of your configuration rather
-than a file that can be committed once for everybody. It is built and linked instead:
+`herdr plugin install` cannot install this plugin. Build and link it:
 
 ```bash
 git clone https://github.com/webdavis/herdr-process.git ~/.local/share/herdr-process
 cd ~/.local/share/herdr-process
 cargo build --release --locked
-./target/release/herdr-process generate --output .   # renders herdr-plugin.toml from your config
+./target/release/herdr-process generate --output .
 herdr plugin link ~/.local/share/herdr-process
 ```
 
-`generate` reads `~/.config/herdr/processes.toml` for the profiles and `~/.config/herdr/config.toml`
-for the chords. Re-run it, and re-link, whenever either changes; the manifest is build output, not
-source, and is deliberately not committed.
+`generate` writes `herdr-plugin.toml` from your profiles and your herdr config. Run it and link
+again after either changes.
 
-Whether a generated manifest can ever be a `herdr plugin install` is an open design question here:
-it needs either a committed manifest that herdr can rewrite, or runtime action registration, which
-herdr plugin v1 does not have.
+## Profiles
+
+Each `[windows.<profile>]` table in `~/.config/herdr/processes.toml` is one profile:
+
+```toml
+[windows.editor]
+program = "nvim"
+args = ["--clean"]
+cwd = "~/projects"
+width = "80%"
+height = "70%"
+ctrl_c = "hide"
+```
+
+`args` is optional. `cwd` is absolute or starts with `~/`. `width` and `height` size the float,
+from 1% to 100%. `ctrl_c` is `hide` to hide the float or `quit` to kill the process.
+
+## Bindings
+
+Each profile has four actions: `split-right`, `split-below`, `toggle-float` and `kill`. Bind them in
+`~/.config/herdr/config.toml`:
+
+```toml
+[[keys.command]]
+key = "prefix+e"
+type = "plugin_action"
+command = "herdr-process.editor:toggle-float"
+```
 
 ## License
 
