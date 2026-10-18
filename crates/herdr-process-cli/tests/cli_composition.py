@@ -111,8 +111,13 @@ class Composition(unittest.TestCase):
         self.env['HERDR_CONFIG_PATH'] = str(marker)
         code, out, err = self.run_cli(['--help'])
         self.assertEqual(code, 0, err)
-        self.assertIn(b'generate --output DIRECTORY', out)
-        self.assertIn(b'action PROFILE split-right|split-below|toggle-float|kill', out)
+        self.assertIn(b'generate --output DIRECTORY [--profiles FILE] [--herdr-config FILE]\n'
+                      b'      Write herdr-plugin.toml to DIRECTORY with four actions for each'
+                      b' profile.\n', out)
+        self.assertIn(b'action PROFILE ACTION [--profiles FILE] [--herdr-config FILE]\n'
+                      b'      Run ACTION for PROFILE: split-right, split-below, toggle-float'
+                      b' or kill.\n', out)
+        self.assertIn(b'Default: processes.toml next to the herdr config.', out)
         self.assertNotIn(b'supervise', out)
 
     def test_invalid_arguments_and_invalid_utf8_exit_two(self):

@@ -8,6 +8,21 @@ use anyhow::{Context, Result};
 use arguments::Arguments;
 use herdr_process_adapters as adapters;
 
+const HELP: &str = "\
+herdr-process keeps one process alive per profile and shows it in herdr panes.
+
+Usage:
+  herdr-process generate --output DIRECTORY [--profiles FILE] [--herdr-config FILE]
+      Write herdr-plugin.toml to DIRECTORY with four actions for each profile.
+  herdr-process action PROFILE ACTION [--profiles FILE] [--herdr-config FILE]
+      Run ACTION for PROFILE: split-right, split-below, toggle-float or kill.
+
+Options:
+  --profiles FILE      Profiles to read. Default: processes.toml next to the herdr config.
+  --herdr-config FILE  herdr config to read. Default: $HERDR_CONFIG_PATH, else
+                       $XDG_CONFIG_HOME/herdr/config.toml, else ~/.config/herdr/config.toml.
+";
+
 fn main() {
     let parsed = std::env::args_os()
         .skip(1)
@@ -40,9 +55,7 @@ fn main() {
 
 fn dispatch(arguments: Arguments) -> Result<()> {
     match arguments {
-        Arguments::Help => println!(
-            "herdr-process\n\n  generate --output DIRECTORY [--profiles FILE] [--herdr-config FILE]\n  action PROFILE split-right|split-below|toggle-float|kill [--profiles FILE] [--herdr-config FILE]"
-        ),
+        Arguments::Help => print!("{HELP}"),
         Arguments::Generate { options, output } => {
             environment::Environment::read(&options, |name| std::env::var_os(name))?
                 .load()?
