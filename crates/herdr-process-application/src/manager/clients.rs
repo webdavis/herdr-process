@@ -89,10 +89,13 @@ impl<P: Ports> Manager<P> {
         }
     }
     pub(super) fn disconnect(&mut self, id: usize) {
-        if let Some(pending) = &mut self.pending
-            && pending.waiting == Some(id)
+        if let Some(Transition {
+            step: Step::Opening(opening),
+            ..
+        }) = &mut self.pending
+            && matches!(opening.stage, Stage::Retiring(waiting) if waiting == id)
         {
-            pending.waiting = None;
+            opening.stage = Stage::RetryAt(self.now);
         }
         self.remove_client(id);
     }

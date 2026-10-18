@@ -1,147 +1,101 @@
 use super::*;
 mod actions;
+mod opening;
 pub(super) struct Command {
     pub reply: Option<usize>,
     pub profile: String,
     pub action: Action,
     pub target: Target,
 }
-pub(super) struct Pending<P: Ports> {
+pub(super) struct Transition<P: Ports> {
     pub command: Command,
-    pub ticket: String,
-    pub candidate: Option<usize>,
-    pub ready: bool,
-    pub dimensions: Option<(u16, u16)>,
-    pub call: Option<P::Call>,
-    pub opened: Option<Placement>,
-    pub intent: ViewIntent,
     pub deadline: Instant,
-    pub waiting: Option<usize>,
-    pub retry: Instant,
+    pub step: Step<P>,
+}
+pub(super) enum Step<P: Ports> {
+    Focusing(P::Call),
+    Opening(Opening<P>),
+}
+pub(super) struct Opening<P: Ports> {
+    pub view: Open,
+    pub ticket: String,
+    pub stage: Stage<P>,
+}
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Open {
+    Float,
+    Split(Direction),
+}
+pub(super) enum Stage<P: Ports> {
+    Retiring(usize),
+    RetryAt(Instant),
+    Calling {
+        call: P::Call,
+        candidate: Option<Candidate>,
+    },
+    Opened {
+        placement: Placement,
+        candidate: Option<Candidate>,
+    },
+}
+#[derive(Clone, Copy)]
+pub(super) struct Candidate {
+    pub id: usize,
+    pub rows: u16,
+    pub cols: u16,
+    pub ready: bool,
+}
+impl<P: Ports> Opening<P> {
+    pub fn candidate(&self) -> Option<&Candidate> {
+        match &self.stage {
+            Stage::Calling { candidate, .. } | Stage::Opened { candidate, .. } => {
+                candidate.as_ref()
+            }
+            _ => None,
+        }
+    }
+    pub fn candidate_slot(&mut self) -> Option<&mut Option<Candidate>> {
+        match &mut self.stage {
+            Stage::Calling { candidate, .. } | Stage::Opened { candidate, .. } => Some(candidate),
+            _ => None,
+        }
+    }
+}
+impl<P: Ports> Transition<P> {
+    pub fn candidate(&self) -> Option<&Candidate> {
+        match &self.step {
+            Step::Opening(opening) => opening.candidate(),
+            Step::Focusing(_) => None,
+        }
+    }
+    pub fn candidate_mut(&mut self) -> Option<&mut Candidate> {
+        match &mut self.step {
+            Step::Opening(opening) => opening.candidate_slot()?.as_mut(),
+            Step::Focusing(_) => None,
+        }
+    }
 }
 impl<P: Ports> Manager<P> {
     pub(super) fn poll_transition(&mut self) {
-        let Some(mut pending) = self.pending.take() else {
+        let Some(mut transition) = self.pending.take() else {
             return;
         };
-        let result = self.advance(&mut pending);
-        match result {
-            Ok(false) => self.pending = Some(pending),
-            Ok(true) => self.finish(&pending.command, Ok(())),
+        match self.advance(&mut transition) {
+            Ok(false) => self.pending = Some(transition),
+            Ok(true) => self.finish(&transition.command, Ok(())),
             Err(error) => {
-                if let Some(id) = pending.candidate {
+                if let Some(id) = transition.candidate().map(|c| c.id) {
                     self.retire(id);
                 }
-                if let Some(session) = self.sessions.get(&pending.command.profile)
+                if let Some(session) = self.sessions.get(&transition.command.profile)
                     && let Some((id, _)) = session.view
                     && let Some(client) = self.clients.get_mut(&id)
                 {
                     client.screen = Some(session.terminal.snapshot());
                 }
-                self.finish(&pending.command, Err(error));
+                self.finish(&transition.command, Err(error));
             }
         }
-    }
-    fn advance(&mut self, pending: &mut Pending<P>) -> anyhow::Result<bool> {
-        anyhow::ensure!(
-            self.sessions.contains_key(&pending.command.profile),
-            "session exited during view replacement; retry to start again"
-        );
-        anyhow::ensure!(
-            self.now < pending.deadline,
-            "view replacement timed out; retry"
-        );
-        if let Some(id) = pending.candidate {
-            anyhow::ensure!(
-                self.clients
-                    .get(&id)
-                    .is_some_and(|c| matches!(c.role, Role::Candidate(_))),
-                "candidate disconnected; retry"
-            );
-        }
-        if let Some(id) = pending.waiting {
-            if self.clients.contains_key(&id) {
-                return Ok(false);
-            }
-            anyhow::bail!("retired attachment did not disconnect; retry");
-        }
-        if pending.call.is_none() && pending.opened.is_none() {
-            if self.now < pending.retry {
-                return Ok(false);
-            }
-            let profile = &self.settings.profiles[&pending.command.profile];
-            let split = if let ViewIntent::OpenSplit(direction) = pending.intent {
-                Some((pending.command.target.clone(), direction))
-            } else {
-                None
-            };
-            pending.call = Some(self.host.open(&OpenView {
-                profile: pending.command.profile.clone(),
-                ticket: pending.ticket.clone(),
-                manager_socket: self.socket.clone(),
-                cwd: profile.command.cwd.clone(),
-                width: profile.width,
-                height: profile.height,
-                split,
-            })?);
-        }
-        if let Some(call) = &mut pending.call {
-            match call.poll() {
-                Ok(None) => return Ok(false),
-                Ok(Some(HostReply::Focused)) => return Ok(true),
-                Ok(Some(HostReply::Opened(pane))) => {
-                    pending.opened = Some(match pending.intent {
-                        ViewIntent::OpenSplit(direction) => Placement::Docked {
-                            target: pending.command.target.clone(),
-                            direction,
-                            pane: pane
-                                .ok_or_else(|| anyhow::anyhow!("split did not return a pane"))?,
-                        },
-                        _ => Placement::Floating,
-                    });
-                    pending.call = None;
-                }
-                Err(error) if error.is_busy() && pending.intent == ViewIntent::OpenFloat => {
-                    if let Some(id) = pending.candidate.take() {
-                        self.retire(id);
-                    }
-                    pending.ready = false;
-                    pending.ticket = self.tickets.issue();
-                    pending.call = None;
-                    pending.retry = self.now + Duration::from_millis(10);
-                    return Ok(false);
-                }
-                Err(error) => return Err(error.into()),
-            }
-        }
-        if pending.ready
-            && let Some(mut placement) = pending.opened.take()
-        {
-            let id = pending
-                .candidate
-                .ok_or_else(|| anyhow::anyhow!("candidate missing"))?;
-            let session = self.sessions.get_mut(&pending.command.profile).unwrap();
-            let (rows, cols) = pending
-                .dimensions
-                .ok_or_else(|| anyhow::anyhow!("candidate size missing"))?;
-            session.resize(rows, cols)?;
-            let screen = session.terminal.snapshot();
-            session.context = session.context_for(&pending.command.target);
-            if let Placement::Docked { target, .. } = &mut placement {
-                *target = session.context.clone();
-            }
-            let old = session.view.replace((id, placement));
-            let client = self.clients.get_mut(&id).unwrap();
-            client.role = Role::Active(pending.command.profile.clone());
-            client.screen = None;
-            self.send(id, Response::Screen { bytes: screen });
-            self.send(id, Response::Ack {});
-            if let Some((old, _)) = old {
-                self.retire(old);
-            }
-            return Ok(true);
-        }
-        Ok(false)
     }
     pub(super) fn finish(&mut self, command: &Command, result: anyhow::Result<()>) {
         self.completed = true;

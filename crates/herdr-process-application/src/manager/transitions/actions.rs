@@ -2,18 +2,23 @@ use super::*;
 impl<P: Ports> Manager<P> {
     pub(in crate::manager) fn execute(&mut self, command: Command) {
         match self.start(&command) {
-            Ok(Some(pending)) => self.pending = Some(Pending { command, ..pending }),
+            Ok(Some(step)) => {
+                self.pending = Some(Transition {
+                    command,
+                    deadline: self.now + Duration::from_millis(600),
+                    step,
+                })
+            }
             Ok(None) => self.finish(&command, Ok(())),
             Err(error) => self.finish(&command, Err(error)),
         }
     }
-    fn start(&mut self, command: &Command) -> anyhow::Result<Option<Pending<P>>> {
+    fn start(&mut self, command: &Command) -> anyhow::Result<Option<Step<P>>> {
         let current = self
             .sessions
             .get(&command.profile)
             .and_then(|s| s.view.as_ref().map(|v| &v.1));
-        let intent = view_intent(command.action, current, &command.target);
-        match intent {
+        let view = match view_intent(command.action, current, &command.target) {
             ViewIntent::Kill => {
                 if let Some(mut session) = self.sessions.remove(&command.profile) {
                     if let Some((id, _)) = session.view.take() {
@@ -31,12 +36,21 @@ impl<P: Ports> Manager<P> {
                 }
                 return Ok(None);
             }
-            ViewIntent::OpenSplit(_) => anyhow::ensure!(
-                !command.target.workspace.is_empty() && !command.target.pane.is_empty(),
-                "split needs a workspace and pane; invoke from a current pane"
-            ),
-            _ => {}
-        }
+            ViewIntent::Focus => {
+                let Some(Placement::Docked { pane, .. }) = current else {
+                    anyhow::bail!("no docked view to focus");
+                };
+                return Ok(Some(Step::Focusing(self.host.focus(pane)?)));
+            }
+            ViewIntent::OpenSplit(direction) => {
+                anyhow::ensure!(
+                    !command.target.workspace.is_empty() && !command.target.pane.is_empty(),
+                    "split needs a workspace and pane; invoke from a current pane"
+                );
+                Open::Split(direction)
+            }
+            ViewIntent::OpenFloat => Open::Float,
+        };
         if !self.sessions.contains_key(&command.profile) {
             let profile = self
                 .settings
@@ -48,46 +62,31 @@ impl<P: Ports> Manager<P> {
                 Session::spawn(&self.processes, profile)?,
             );
         }
-        let mut pending = Pending {
-            command: Command {
-                reply: command.reply,
-                profile: command.profile.clone(),
-                action: command.action,
-                target: command.target.clone(),
-            },
-            ticket: self.tickets.issue(),
-            candidate: None,
-            ready: false,
-            dimensions: None,
-            call: None,
-            opened: None,
-            intent,
-            deadline: self.now + Duration::from_millis(600),
-            waiting: None,
-            retry: self.now,
+        let stage = match view {
+            Open::Float => self
+                .retire_floating_view()
+                .map_or(Stage::RetryAt(self.now), Stage::Retiring),
+            Open::Split(_) => Stage::RetryAt(self.now),
         };
-        if intent == ViewIntent::Focus {
-            if let Some((_, Placement::Docked { pane, .. })) = &self.sessions[&command.profile].view
+        Ok(Some(Step::Opening(Opening {
+            view,
+            ticket: self.tickets.issue(),
+            stage,
+        })))
+    }
+    fn retire_floating_view(&mut self) -> Option<usize> {
+        let old = self.sessions.values_mut().find_map(|session| {
+            if session
+                .view
+                .as_ref()
+                .is_some_and(|v| v.1 == Placement::Floating)
             {
-                pending.call = Some(self.host.focus(pane)?);
+                session.view.take().map(|v| v.0)
+            } else {
+                None
             }
-        } else if intent == ViewIntent::OpenFloat {
-            let old = self.sessions.values_mut().find_map(|session| {
-                if session
-                    .view
-                    .as_ref()
-                    .is_some_and(|v| v.1 == Placement::Floating)
-                {
-                    session.view.take().map(|v| v.0)
-                } else {
-                    None
-                }
-            });
-            if let Some(id) = old {
-                self.retire(id);
-                pending.waiting = Some(id);
-            }
-        }
-        Ok(Some(pending))
+        })?;
+        self.retire(old);
+        Some(old)
     }
 }
