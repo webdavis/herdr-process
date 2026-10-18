@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import select
 import shutil
+import signal
 import socket
 import struct
 import subprocess
@@ -283,6 +284,7 @@ class Composition(unittest.TestCase):
             forwarded += bytes(message['bytes'])
         self.assertEqual(forwarded, raw)
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 35, 101, 0, 0))
+        child.send_signal(signal.SIGWINCH)
         self.assertEqual(self.receive(connection), {'type': 'resize', 'rows': 35, 'cols': 101})
         self.frame(connection, {'type': 'retire'})
         self.assertEqual(self.receive(connection), {'type': 'detach'})

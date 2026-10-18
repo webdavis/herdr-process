@@ -1,5 +1,5 @@
 use anyhow::{Result, bail, ensure};
-use herdr_process_adapters::{AttachmentTerminal, Peer};
+use herdr_process_adapters::{AttachmentTerminal, Peer, Readiness};
 use herdr_process_protocol::{MAX_FRAME, Request, Response};
 use notice::Notice;
 use std::{
@@ -72,7 +72,7 @@ pub(super) fn run(
         }
         if notice
             .as_ref()
-            .is_some_and(|shown| shown.expired(Instant::now()))
+            .is_some_and(|shown| Instant::now() >= shown.until())
         {
             screens.push(screen.clone().unwrap_or_default())?;
             notice = None;
@@ -97,7 +97,22 @@ pub(super) fn run(
                 _ => {}
             }
         }
-        std::thread::sleep(Duration::from_millis(1));
+        let mut readiness = Readiness::default();
+        peer.watch(&mut readiness);
+        terminal.watch(
+            &mut readiness,
+            phase == Phase::Active && peer.is_idle(),
+            !screens.is_empty(),
+        );
+        let handshake = (phase != Phase::Active).then_some(deadline);
+        match handshake
+            .into_iter()
+            .chain(notice.as_ref().map(Notice::until))
+            .min()
+        {
+            Some(until) => readiness.wait_until(until)?,
+            None => readiness.wait(None)?,
+        }
     }
 }
 

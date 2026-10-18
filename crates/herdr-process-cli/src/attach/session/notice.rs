@@ -15,8 +15,8 @@ impl Notice {
             until: now + SHOWN_FOR,
         }
     }
-    pub fn expired(&self, now: Instant) -> bool {
-        now >= self.until
+    pub fn until(&self) -> Instant {
+        self.until
     }
     pub fn render(&self, (rows, cols): (u16, u16)) -> Vec<u8> {
         let text: String = self.message.chars().take(cols.into()).collect();

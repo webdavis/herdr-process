@@ -89,8 +89,12 @@ impl Peer {
     pub fn watch(&self, readiness: &mut Readiness) {
         readiness.readable(self.stream.as_raw_fd());
         if !self.is_idle() {
-            readiness.writable(self.stream.as_raw_fd());
+            self.watch_writable(readiness);
         }
+    }
+
+    pub fn watch_writable(&self, readiness: &mut Readiness) {
+        readiness.writable(self.stream.as_raw_fd());
     }
 }
 

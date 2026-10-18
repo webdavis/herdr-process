@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, ensure};
-use herdr_process_adapters::{AttachmentTerminal, Endpoint};
+use herdr_process_adapters::{AttachmentTerminal, Endpoint, Readiness};
 use herdr_process_protocol::Request;
 use std::{
     os::fd::AsFd,
@@ -41,10 +41,11 @@ pub fn run() -> Result<()> {
     let restored = terminal.finish();
     if peer.send(&Request::Detach {}).is_ok() {
         let deadline = Instant::now() + Duration::from_millis(50);
-        while Instant::now() < deadline {
-            match peer.flush() {
-                Ok(false) => std::thread::sleep(Duration::from_millis(1)),
-                _ => break,
+        while Instant::now() < deadline && matches!(peer.flush(), Ok(false)) {
+            let mut readiness = Readiness::default();
+            peer.watch_writable(&mut readiness);
+            if readiness.wait_until(deadline).is_err() {
+                break;
             }
         }
     }
