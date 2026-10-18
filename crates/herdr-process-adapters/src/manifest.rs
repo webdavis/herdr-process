@@ -46,7 +46,7 @@ impl Configuration {
             for action in Action::ALL {
                 actions.push(Entry {
                     id: format!("{profile}:{action}"),
-                    title: format!("{profile}: {action}"),
+                    title: title(profile, action),
                     command: vec![
                         "./target/release/herdr-process".into(),
                         "action".into(),
@@ -58,7 +58,7 @@ impl Configuration {
         }
         let manifest = Manifest {
             id: "herdr-process",
-            name: "Herdr process",
+            name: "herdr-process",
             version: env!("CARGO_PKG_VERSION"),
             min_herdr_version: "0.9.0",
             platforms: ["macos"],
@@ -78,6 +78,14 @@ impl Configuration {
             }],
         };
         Ok(toml::to_string(&manifest)?)
+    }
+}
+fn title(profile: &str, action: Action) -> String {
+    match action {
+        Action::SplitRight => format!("Open {profile} in a split to the right"),
+        Action::SplitBelow => format!("Open {profile} in a split below"),
+        Action::ToggleFloat => format!("Show or hide {profile} in a float"),
+        Action::Kill => format!("Kill the {profile} process"),
     }
 }
 fn replace_manifest(
