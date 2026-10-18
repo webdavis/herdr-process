@@ -1,41 +1,4 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum HostReply {
-    Opened(Option<String>),
-    Focused,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HostFailureCode {
-    UiBusy,
-    Rejected,
-    Spawn,
-    Io,
-    Exit,
-    Malformed,
-    Oversized,
-    Timeout,
-}
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HostFailure {
-    pub code: HostFailureCode,
-    pub message: &'static str,
-}
-impl HostFailure {
-    pub fn is_busy(&self) -> bool {
-        self.code == HostFailureCode::UiBusy
-    }
-    pub(super) fn new(code: HostFailureCode) -> Self {
-        Self {
-            code,
-            message: "Herdr host call failed",
-        }
-    }
-}
-impl std::fmt::Display for HostFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({:?})", self.message, self.code)
-    }
-}
-impl std::error::Error for HostFailure {}
+pub use herdr_process_application::{HostFailure, HostFailureCode, HostReply};
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Expected {
     Popup,

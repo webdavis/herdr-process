@@ -1,18 +1,17 @@
 use super::*;
-use adapters::{PtySize, SupervisedProcess, Terminal};
-pub(super) struct Session {
-    pub process: SupervisedProcess,
-    pub terminal: Terminal,
+pub(super) struct Session<P: Ports> {
+    pub process: P::Process,
+    pub terminal: P::Screen,
     pub view: Option<(usize, Placement)>,
     pub context: Target,
     input: VecDeque<u8>,
 }
-impl Session {
-    pub fn spawn(binary: &std::path::Path, profile: &Profile) -> anyhow::Result<Self> {
-        let process = SupervisedProcess::spawn(binary, &profile.command, size(24, 80))?;
+impl<P: Ports> Session<P> {
+    pub fn spawn(processes: &P::Processes, profile: &Profile) -> anyhow::Result<Self> {
+        let process = processes.spawn(&profile.command, 24, 80)?;
         Ok(Self {
             process,
-            terminal: Terminal::new(24, 80),
+            terminal: P::Screen::new(24, 80),
             view: None,
             context: Target {
                 workspace: String::new(),
@@ -34,21 +33,18 @@ impl Session {
         }
     }
     pub fn preview(&self, rows: u16, cols: u16) -> Vec<u8> {
-        let mut preview = Terminal::new(rows, cols);
+        let mut preview = P::Screen::new(rows, cols);
         preview.feed(&self.terminal.snapshot());
         preview.snapshot()
     }
     pub fn resize(&mut self, rows: u16, cols: u16) -> anyhow::Result<()> {
         validate_size(rows, cols)?;
-        self.process.resize(size(rows, cols))?;
+        self.process.resize(rows, cols)?;
         self.terminal.resize(rows, cols);
         Ok(())
     }
-    pub fn watch(&self, readiness: &mut adapters::Readiness) {
-        self.process.watch(readiness);
-        if !self.input.is_empty() {
-            self.process.watch_writable(readiness);
-        }
+    pub fn writing(&self) -> bool {
+        !self.input.is_empty()
     }
     pub fn input(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
         anyhow::ensure!(
@@ -89,15 +85,7 @@ impl Session {
         Ok((changed, exited))
     }
 }
-fn size(rows: u16, cols: u16) -> PtySize {
-    PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    }
-}
-impl Manager {
+impl<P: Ports> Manager<P> {
     pub(super) fn poll_sessions(&mut self) -> anyhow::Result<()> {
         let mut exited = Vec::new();
         for (name, session) in &mut self.sessions {

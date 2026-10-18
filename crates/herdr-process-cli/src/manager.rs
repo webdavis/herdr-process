@@ -1,35 +1,17 @@
 use herdr_process_adapters as adapters;
-use herdr_process_application::{Effect, InputRouter, ViewIntent, view_intent};
-use herdr_process_domain::{Action, Placement, Profile, Target};
-use herdr_process_protocol::{Request, Response};
-use std::{
-    collections::{BTreeMap, VecDeque},
-    path::PathBuf,
-    time::{Duration, Instant},
-};
-mod clients;
-mod input;
-mod requests;
-use input::Work;
-mod sessions;
-mod transitions;
-use clients::{Client, Role};
-use sessions::Session;
-use transitions::{Command, Pending};
+use herdr_process_application::{Manager, Ports, Settings};
+use std::{path::PathBuf, time::Instant};
 
-const TICK: Duration = Duration::from_millis(10);
+struct Adapters;
 
-struct Manager {
-    configuration: adapters::Configuration,
-    host: adapters::Herdr,
-    supervisor_binary: PathBuf,
-    socket: PathBuf,
-    clients: BTreeMap<usize, Client>,
-    sessions: BTreeMap<String, Session>,
-    queue: VecDeque<Work>,
-    pending: Option<Pending>,
-    epoch: Instant,
-    completed: bool,
+impl Ports for Adapters {
+    type Host = adapters::Herdr;
+    type Call = adapters::HostCall;
+    type Processes = adapters::Supervisor;
+    type Process = adapters::SupervisedProcess;
+    type Tickets = adapters::RandomTickets;
+    type Screen = adapters::Terminal;
+    type Connection = adapters::Peer;
 }
 
 pub fn run(
@@ -39,59 +21,49 @@ pub fn run(
     supervisor_binary: PathBuf,
     socket: PathBuf,
 ) -> anyhow::Result<()> {
-    let mut manager = Manager {
-        configuration,
-        host,
-        supervisor_binary,
-        socket,
-        clients: BTreeMap::new(),
-        sessions: BTreeMap::new(),
-        queue: VecDeque::new(),
-        pending: None,
-        epoch: Instant::now(),
-        completed: false,
+    let settings = Settings {
+        identity: configuration.identity().to_owned(),
+        keymap: configuration.keymap().clone(),
+        profiles: configuration.profiles().clone(),
     };
+    let processes = adapters::Supervisor {
+        binary: supervisor_binary,
+    };
+    let mut manager = Manager::<Adapters>::new(
+        settings,
+        socket,
+        host,
+        processes,
+        adapters::RandomTickets,
+        Instant::now(),
+    );
     let mut next = 0usize;
     loop {
         if let Some(peer) = listener.accept()? {
             next = next
                 .checked_add(1)
                 .ok_or_else(|| anyhow::anyhow!("connection identity exhausted"))?;
-            manager
-                .clients
-                .insert(next, Client::new(peer, &manager.configuration));
+            manager.connect(next, peer);
         }
-        manager.poll_clients();
-        manager.poll_sessions()?;
-        manager.poll_work();
-        manager.poll_transition();
-        if manager.completed
-            && manager.clients.is_empty()
-            && manager.sessions.is_empty()
-            && manager.pending.is_none()
-            && manager.queue.is_empty()
-        {
+        manager.tick(Instant::now())?;
+        if manager.finished() {
             return Ok(());
         }
-        manager.wait(&listener)?;
+        wait(&manager, &listener)?;
     }
 }
 
-impl Manager {
-    fn wait(&self, listener: &adapters::Listener) -> std::io::Result<()> {
-        let mut readiness = adapters::Readiness::default();
-        listener.watch(&mut readiness);
-        for client in self.clients.values() {
-            client.peer.watch(&mut readiness);
-        }
-        for session in self.sessions.values() {
-            session.watch(&mut readiness);
-        }
-        readiness.wait(self.timeout())
+fn wait(manager: &Manager<Adapters>, listener: &adapters::Listener) -> std::io::Result<()> {
+    let mut readiness = adapters::Readiness::default();
+    listener.watch(&mut readiness);
+    for peer in manager.connections() {
+        peer.watch(&mut readiness);
     }
-
-    fn timeout(&self) -> Option<Duration> {
-        let timers = self.pending.is_some() || !self.clients.is_empty() || !self.queue.is_empty();
-        timers.then_some(TICK)
+    for (process, writing) in manager.processes() {
+        process.watch(&mut readiness);
+        if writing {
+            process.watch_writable(&mut readiness);
+        }
     }
+    readiness.wait(manager.timeout())
 }

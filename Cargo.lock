@@ -87,7 +87,9 @@ dependencies = [
 name = "herdr-process-application"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "herdr-process-domain",
+ "herdr-process-protocol",
 ]
 
 [[package]]

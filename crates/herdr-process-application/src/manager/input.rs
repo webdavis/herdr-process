@@ -3,7 +3,7 @@ pub(super) enum Work {
     Command(Command),
     Effect { source: usize, effect: Effect },
 }
-impl Manager {
+impl<P: Ports> Manager<P> {
     pub(super) fn poll_work(&mut self) {
         for _ in 0..128 {
             let input_can_progress = match self.queue.front() {
@@ -85,7 +85,7 @@ impl Manager {
                     .as_ref()
                     .is_some_and(|v| v.1 == Placement::Floating) =>
             {
-                let action = self.configuration.profiles()[&profile].ctrl_c.action();
+                let action = self.settings.profiles[&profile].ctrl_c.action();
                 self.execute(Command {
                     reply: None,
                     profile,

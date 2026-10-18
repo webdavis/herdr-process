@@ -1,5 +1,6 @@
 use super::*;
 use crate::herdr::arguments::{focus_arguments, open_arguments};
+use herdr_process_domain::{Direction, Target};
 use std::ffi::OsStr;
 
 fn words(items: &[&str]) -> Vec<OsString> {

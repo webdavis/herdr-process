@@ -1,5 +1,5 @@
 use super::*;
-impl Manager {
+impl<P: Ports> Manager<P> {
     pub(super) fn request(&mut self, id: usize, request: Request) {
         if !self.clients.contains_key(&id) {
             return;
@@ -25,11 +25,11 @@ impl Manager {
             } => {
                 anyhow::ensure!(role == Role::Fresh, "connection already assigned");
                 anyhow::ensure!(
-                    configuration == self.configuration.identity(),
+                    configuration == self.settings.identity,
                     "configuration changed; retry with the current configuration"
                 );
                 anyhow::ensure!(
-                    self.configuration.profiles().contains_key(&profile),
+                    self.settings.profiles.contains_key(&profile),
                     "unknown profile"
                 );
                 anyhow::ensure!(self.queue.len() < 128, "request queue full; retry");
@@ -90,12 +90,13 @@ impl Manager {
                     matches!(role, Role::Active(_)),
                     "input requires committed attachment"
                 );
+                let elapsed = self.elapsed();
                 let effects = self
                     .clients
                     .get_mut(&id)
                     .unwrap()
                     .router
-                    .feed(&bytes, self.epoch.elapsed());
+                    .feed(&bytes, elapsed);
                 self.effects(id, effects);
             }
             Request::Resize { rows, cols } => {

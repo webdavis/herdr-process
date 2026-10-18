@@ -1,5 +1,5 @@
 use super::*;
-impl Manager {
+impl<P: Ports> Manager<P> {
     pub(in crate::manager) fn execute(&mut self, command: Command) {
         match self.start(&command) {
             Ok(Some(pending)) => self.pending = Some(Pending { command, ..pending }),
@@ -7,7 +7,7 @@ impl Manager {
             Err(error) => self.finish(&command, Err(error)),
         }
     }
-    fn start(&mut self, command: &Command) -> anyhow::Result<Option<Pending>> {
+    fn start(&mut self, command: &Command) -> anyhow::Result<Option<Pending<P>>> {
         let current = self
             .sessions
             .get(&command.profile)
@@ -39,13 +39,13 @@ impl Manager {
         }
         if !self.sessions.contains_key(&command.profile) {
             let profile = self
-                .configuration
-                .profiles()
+                .settings
+                .profiles
                 .get(&command.profile)
                 .ok_or_else(|| anyhow::anyhow!("unknown profile"))?;
             self.sessions.insert(
                 command.profile.clone(),
-                Session::spawn(&self.supervisor_binary, profile)?,
+                Session::spawn(&self.processes, profile)?,
             );
         }
         let mut pending = Pending {
@@ -55,16 +55,16 @@ impl Manager {
                 action: command.action,
                 target: command.target.clone(),
             },
-            ticket: ticket()?,
+            ticket: self.tickets.issue(),
             candidate: None,
             ready: false,
             dimensions: None,
             call: None,
             opened: None,
             intent,
-            deadline: Instant::now() + Duration::from_millis(600),
+            deadline: self.now + Duration::from_millis(600),
             waiting: None,
-            retry: Instant::now(),
+            retry: self.now,
         };
         if intent == ViewIntent::Focus {
             if let Some((_, Placement::Docked { pane, .. })) = &self.sessions[&command.profile].view

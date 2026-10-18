@@ -1,5 +1,6 @@
 use crate::{Readiness, unix};
-use herdr_process_protocol::{Decoder, MAX_FRAME, encode};
+use herdr_process_application::Connection;
+use herdr_process_protocol::{Decoder, MAX_FRAME, Request, Response, encode};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     collections::VecDeque,
@@ -95,3 +96,18 @@ impl Peer {
 
 #[cfg(test)]
 mod tests;
+
+impl Connection for Peer {
+    fn read(&mut self) -> io::Result<Option<Vec<Request>>> {
+        Peer::read(self)
+    }
+    fn send(&mut self, response: &Response) -> io::Result<()> {
+        Peer::send(self, response)
+    }
+    fn flush(&mut self) -> io::Result<bool> {
+        Peer::flush(self)
+    }
+    fn is_idle(&self) -> bool {
+        Peer::is_idle(self)
+    }
+}

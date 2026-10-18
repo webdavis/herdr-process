@@ -1,4 +1,5 @@
 use super::*;
+use herdr_process_application::Screen;
 
 #[test]
 fn hidden_terminal_answers_cursor_and_status_queries_once() {
