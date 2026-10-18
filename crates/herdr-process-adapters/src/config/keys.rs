@@ -1,15 +1,74 @@
 use anyhow::{Result, bail, ensure};
 
-// Legacy encodings verified against Herdr b99002ac input/{parse,encode}.rs.
+const NAMED: &[(&str, char)] = &[
+    ("space", ' '),
+    ("enter", '\r'),
+    ("return", '\r'),
+    ("esc", '\x1b'),
+    ("escape", '\x1b'),
+    ("tab", '\t'),
+    ("backspace", '\x7f'),
+    ("bs", '\x7f'),
+    ("minus", '-'),
+    ("comma", ','),
+    ("period", '.'),
+    ("slash", '/'),
+    ("backslash", '\\'),
+    ("quote", '\''),
+    ("double_quote", '"'),
+    ("double-quote", '"'),
+    ("semicolon", ';'),
+    ("colon", ':'),
+    ("percent", '%'),
+    ("ampersand", '&'),
+    ("backtick", '`'),
+    ("plus", '+'),
+];
+const CURSOR: &[(&str, char)] = &[("up", 'A'), ("down", 'B'), ("right", 'C'), ("left", 'D')];
+const FUNCTION_CODES: [u8; 8] = [15, 17, 18, 19, 20, 21, 23, 24];
+
+#[derive(Default)]
+struct Modifiers {
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
+}
+
+impl Modifiers {
+    fn code(&self) -> u8 {
+        1 + u8::from(self.shift) + 2 * u8::from(self.alt) + 4 * u8::from(self.ctrl)
+    }
+    fn csi(&self, prefix: &str, end: char, plain: String) -> Vec<u8> {
+        if self.code() == 1 {
+            plain
+        } else {
+            format!("\x1b[{prefix};{}{end}", self.code())
+        }
+        .into_bytes()
+    }
+}
+
 pub(super) fn encode(raw: &str) -> Result<Vec<u8>> {
-    let (mut ctrl, mut shift, mut alt) = (false, false, false);
+    let (modifiers, key) = modifiers(raw)?;
+    let lower = key.to_ascii_lowercase();
+    if let Some(bytes) = cursor(&lower, &modifiers) {
+        return Ok(bytes);
+    }
+    if let Some(bytes) = function(key, &lower, &modifiers)? {
+        return Ok(bytes);
+    }
+    character(raw, key, &lower, modifiers)
+}
+
+fn modifiers(raw: &str) -> Result<(Modifiers, &str)> {
+    let mut modifiers = Modifiers::default();
     let mut key = None;
     for token in raw.split('+').map(str::trim) {
         ensure!(!token.is_empty(), "empty key token in {raw:?}");
         match token.to_ascii_lowercase().as_str() {
-            "ctrl" | "control" => ctrl = true,
-            "shift" => shift = true,
-            "alt" | "option" | "meta" => alt = true,
+            "ctrl" | "control" => modifiers.ctrl = true,
+            "shift" => modifiers.shift = true,
+            "alt" | "option" | "meta" => modifiers.alt = true,
             "cmd" | "command" | "super" | "hyper" => {
                 bail!("unsupported legacy modifier in {raw:?}")
             }
@@ -20,66 +79,36 @@ pub(super) fn encode(raw: &str) -> Result<Vec<u8>> {
         }
     }
     let key = key.ok_or_else(|| anyhow::anyhow!("missing key in {raw:?}"))?;
-    let lower = key.to_ascii_lowercase();
-    let modifier = 1 + u8::from(shift) + 2 * u8::from(alt) + 4 * u8::from(ctrl);
-    let special = match lower.as_str() {
-        "up" => Some('A'),
-        "down" => Some('B'),
-        "right" => Some('C'),
-        "left" => Some('D'),
-        _ => None,
-    };
-    if let Some(end) = special {
-        return Ok(if modifier == 1 {
-            format!("\x1b[{end}")
-        } else {
-            format!("\x1b[1;{modifier}{end}")
-        }
-        .into_bytes());
+    Ok((modifiers, key))
+}
+
+fn cursor(lower: &str, modifiers: &Modifiers) -> Option<Vec<u8>> {
+    let end = lookup(CURSOR, lower)?;
+    Some(modifiers.csi("1", end, format!("\x1b[{end}")))
+}
+
+fn function(key: &str, lower: &str, modifiers: &Modifiers) -> Result<Option<Vec<u8>>> {
+    if lower.len() < 2 || !lower.starts_with('f') {
+        return Ok(None);
     }
-    if lower.len() > 1 && lower.starts_with('f') {
-        let n: usize = lower[1..].parse()?;
-        ensure!(
-            (1..=12).contains(&n),
-            "unsupported legacy function key {key}"
-        );
-        if n <= 4 {
-            let end = char::from(b'P' + n as u8 - 1);
-            return Ok(if modifier == 1 {
-                format!("\x1bO{end}")
-            } else {
-                format!("\x1b[1;{modifier}{end}")
-            }
-            .into_bytes());
-        }
-        let code = [15, 17, 18, 19, 20, 21, 23, 24][n - 5];
-        return Ok(if modifier == 1 {
-            format!("\x1b[{code}~")
-        } else {
-            format!("\x1b[{code};{modifier}~")
-        }
-        .into_bytes());
-    }
-    let ch = match lower.as_str() {
-        "space" => ' ',
-        "enter" | "return" => '\r',
-        "esc" | "escape" => '\x1b',
-        "tab" => '\t',
-        "backspace" | "bs" => '\x7f',
-        "minus" => '-',
-        "comma" => ',',
-        "period" => '.',
-        "slash" => '/',
-        "backslash" => '\\',
-        "quote" => '\'',
-        "double_quote" | "double-quote" => '"',
-        "semicolon" => ';',
-        "colon" => ':',
-        "percent" => '%',
-        "ampersand" => '&',
-        "backtick" => '`',
-        "plus" => '+',
-        _ => {
+    let n: usize = lower[1..].parse()?;
+    ensure!(
+        (1..=12).contains(&n),
+        "unsupported legacy function key {key}"
+    );
+    Ok(Some(if n <= 4 {
+        let end = char::from(b'P' + n as u8 - 1);
+        modifiers.csi("1", end, format!("\x1bO{end}"))
+    } else {
+        let code = FUNCTION_CODES[n - 5].to_string();
+        modifiers.csi(&code, '~', format!("\x1b[{code}~"))
+    }))
+}
+
+fn character(raw: &str, key: &str, lower: &str, mut modifiers: Modifiers) -> Result<Vec<u8>> {
+    let ch = match lookup(NAMED, lower) {
+        Some(ch) => ch,
+        None => {
             let mut chars = key.chars();
             let ch = chars.next().ok_or_else(|| anyhow::anyhow!("empty key"))?;
             ensure!(
@@ -89,16 +118,16 @@ pub(super) fn encode(raw: &str) -> Result<Vec<u8>> {
             ch
         }
     };
-    shift |= ch.is_ascii_uppercase();
-    let mut bytes = if ch == '\t' && shift && !ctrl && !alt {
+    modifiers.shift |= ch.is_ascii_uppercase();
+    let mut bytes = if ch == '\t' && modifiers.shift && !modifiers.ctrl && !modifiers.alt {
         b"\x1b[Z".to_vec()
-    } else if ctrl {
+    } else if modifiers.ctrl {
         ensure!(
-            !shift && ch.is_ascii_lowercase() && !matches!(ch, 'i' | 'm'),
+            !modifiers.shift && ch.is_ascii_lowercase() && !matches!(ch, 'i' | 'm'),
             "ambiguous or unsupported legacy Ctrl chord {raw:?}"
         );
         vec![ch as u8 - b'a' + 1]
-    } else if shift {
+    } else if modifiers.shift {
         ensure!(
             ch.is_ascii_alphabetic(),
             "ambiguous legacy Shift chord {raw:?}"
@@ -107,8 +136,15 @@ pub(super) fn encode(raw: &str) -> Result<Vec<u8>> {
     } else {
         ch.to_string().into_bytes()
     };
-    if alt {
+    if modifiers.alt {
         bytes.insert(0, 27);
     }
     Ok(bytes)
+}
+
+fn lookup(table: &[(&str, char)], name: &str) -> Option<char> {
+    table
+        .iter()
+        .find(|(candidate, _)| *candidate == name)
+        .map(|(_, ch)| *ch)
 }
