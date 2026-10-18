@@ -15,7 +15,7 @@ fn a_failed_in_pane_chord_reports_the_error_to_the_pane_it_came_from() {
     assert_eq!(
         attached.sent(),
         vec![Sent::Error(
-            "shell split-right: Herdr host call failed (Rejected)".into()
+            "shell split-right: herdr refused the request".into()
         )]
     );
     assert_eq!(controller.sent(), vec![Sent::Ack]);

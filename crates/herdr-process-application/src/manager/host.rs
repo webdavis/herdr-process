@@ -46,7 +46,16 @@ impl HostFailure {
 
 impl std::fmt::Display for HostFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Herdr host call failed ({:?})", self.code)
+        f.write_str(match self.code {
+            HostFailureCode::UiBusy => "herdr is busy, try again",
+            HostFailureCode::Rejected => "herdr refused the request",
+            HostFailureCode::Spawn => "could not start herdr",
+            HostFailureCode::Io => "could not talk to herdr",
+            HostFailureCode::Exit => "herdr exited with an error",
+            HostFailureCode::Malformed => "herdr sent a reply that could not be read",
+            HostFailureCode::Oversized => "herdr sent a reply that is too large",
+            HostFailureCode::Timeout => "herdr did not answer in time",
+        })
     }
 }
 

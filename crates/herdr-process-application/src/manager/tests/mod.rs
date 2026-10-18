@@ -12,6 +12,7 @@ mod configuration;
 mod ctrl_c;
 mod float_replacement;
 mod focus;
+mod host_failure;
 mod kill;
 mod split;
 mod toggle_float;

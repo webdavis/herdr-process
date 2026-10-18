@@ -38,7 +38,7 @@ fn a_busy_host_fails_a_split_at_once() {
     assert_eq!(
         controller.sent(),
         vec![Sent::Error(
-            "shell split-right: Herdr host call failed (UiBusy)".into()
+            "shell split-right: herdr is busy, try again".into()
         )]
     );
     assert_eq!(world.host.opened().len(), 1);
@@ -55,7 +55,7 @@ fn a_rejected_host_call_fails_the_float() {
     assert_eq!(
         controller.sent(),
         vec![Sent::Error(
-            "shell toggle-float: Herdr host call failed (Rejected)".into()
+            "shell toggle-float: herdr refused the request".into()
         )]
     );
 }
