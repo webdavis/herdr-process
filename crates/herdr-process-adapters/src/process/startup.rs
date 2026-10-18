@@ -93,7 +93,10 @@ impl Startup {
                         startup.child.try_wait()?.is_none(),
                         "guardian exited before authentication"
                     );
-                    super::control::wait(listener.as_raw_fd(), libc::POLLIN, end)?;
+                    super::control::wait(
+                        |readiness| readiness.readable(listener.as_raw_fd()),
+                        end,
+                    )?;
                 }
             }
         }
@@ -124,7 +127,7 @@ impl Startup {
             if let Some(status) = self.child.try_wait()? {
                 return Ok(status);
             }
-            super::control::wait(-1, 0, end).map_err(|e| anyhow::anyhow!("guardian reap: {e}"))?;
+            super::control::wait(|_| {}, end).map_err(|e| anyhow::anyhow!("guardian reap: {e}"))?;
         }
     }
 }

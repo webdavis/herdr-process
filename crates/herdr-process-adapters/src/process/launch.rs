@@ -121,7 +121,7 @@ impl Launch {
                         ))
                     );
                 }
-                None => control::wait(fd, libc::POLLIN, end)?,
+                None => control::wait(|readiness| readiness.readable(fd), end)?,
             }
         }
     }

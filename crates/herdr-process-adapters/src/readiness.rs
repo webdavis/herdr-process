@@ -1,4 +1,8 @@
-use std::{io, os::fd::RawFd, time::Duration};
+use std::{
+    io,
+    os::fd::RawFd,
+    time::{Duration, Instant},
+};
 
 #[derive(Default)]
 pub struct Readiness {
@@ -20,6 +24,10 @@ impl Readiness {
             events,
             revents: 0,
         });
+    }
+
+    pub fn wait_until(&mut self, deadline: Instant) -> io::Result<()> {
+        self.wait(Some(deadline.saturating_duration_since(Instant::now())))
     }
 
     pub fn wait(&mut self, timeout: Option<Duration>) -> io::Result<()> {

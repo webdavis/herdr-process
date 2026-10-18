@@ -146,7 +146,7 @@ impl TerminalJobs {
             if self.members(end)?.is_empty() {
                 return Ok(());
             }
-            super::control::wait(-1, 0, end)?;
+            super::control::wait(|_| {}, end)?;
         }
     }
 }
