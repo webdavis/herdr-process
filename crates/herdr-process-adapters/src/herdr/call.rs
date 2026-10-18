@@ -1,5 +1,6 @@
 use super::reply::{Expected, HostFailure, HostFailureCode, HostReply};
 use crate::unix;
+use herdr_process_application::Call;
 use std::{
     io::{self, Read},
     os::fd::AsRawFd,
@@ -60,8 +61,10 @@ impl HostCall {
             .map_err(|_| HostFailure::new(HostFailureCode::Io))?;
         Ok(call)
     }
+}
 
-    pub fn poll(&mut self) -> Result<Option<HostReply>, HostFailure> {
+impl Call for HostCall {
+    fn poll(&mut self) -> Result<Option<HostReply>, HostFailure> {
         if let Some(outcome) = &self.outcome {
             return outcome.clone().map(Some);
         }
@@ -83,7 +86,9 @@ impl HostCall {
         }
         result
     }
+}
 
+impl HostCall {
     fn advance(&mut self) -> Result<Option<HostReply>, HostFailure> {
         if self.started.elapsed() >= self.deadline {
             return Err(HostFailure::new(HostFailureCode::Timeout));

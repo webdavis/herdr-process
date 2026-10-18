@@ -8,18 +8,18 @@ pub(super) enum Role {
     Active(String),
     Retiring(Instant),
 }
-pub(super) struct Client {
-    pub peer: adapters::Peer,
+pub(super) struct Client<P: Ports> {
+    pub peer: P::Connection,
     pub router: InputRouter,
     pub role: Role,
     pub screen: Option<Vec<u8>>,
     pub failed: bool,
 }
-impl Client {
-    pub fn new(peer: adapters::Peer, configuration: &adapters::Configuration) -> Self {
+impl<P: Ports> Client<P> {
+    pub fn new(peer: P::Connection, keymap: &crate::Keymap) -> Self {
         Self {
             peer,
-            router: InputRouter::new(configuration.keymap()),
+            router: InputRouter::new(keymap),
             role: Role::Fresh,
             screen: None,
             failed: false,
@@ -30,15 +30,15 @@ impl Client {
             self.failed = true;
         }
     }
-    pub fn retire(&mut self) {
-        self.role = Role::Retiring(Instant::now());
+    pub fn retire(&mut self, now: Instant) {
+        self.role = Role::Retiring(now);
         if let Some(bytes) = self.screen.take() {
             self.send(Response::Screen { bytes });
         }
         self.send(Response::Retire {});
     }
 }
-impl Manager {
+impl<P: Ports> Manager<P> {
     pub(super) fn send(&mut self, id: usize, response: Response) {
         if let Some(client) = self.clients.get_mut(&id) {
             client.send(response);
@@ -46,18 +46,19 @@ impl Manager {
     }
     pub(super) fn retire(&mut self, id: usize) {
         if let Some(client) = self.clients.get_mut(&id) {
-            client.retire();
+            client.retire(self.now);
         }
     }
     pub(super) fn poll_clients(&mut self) {
+        let elapsed = self.elapsed();
         let ids: Vec<_> = self.clients.keys().copied().collect();
         for id in ids {
-            if matches!(self.clients[&id].role,Role::Retiring(since) if since.elapsed()>=Duration::from_millis(500))
+            if matches!(self.clients[&id].role, Role::Retiring(since) if self.now.saturating_duration_since(since) >= Duration::from_millis(500))
             {
                 self.remove_client(id);
                 continue;
             }
-            let requests = self.clients.get_mut(&id).unwrap().peer.read::<Request>();
+            let requests = self.clients.get_mut(&id).unwrap().peer.read();
             match requests {
                 Ok(Some(requests)) => {
                     for request in requests {
@@ -72,7 +73,7 @@ impl Manager {
             if let Some(client) = self.clients.get_mut(&id)
                 && let Role::Active(_) = client.role
             {
-                let effects = client.router.expire(self.epoch.elapsed());
+                let effects = client.router.expire(elapsed);
                 self.effects(id, effects);
             }
             if let Some(client) = self.clients.get_mut(&id) {

@@ -3,6 +3,7 @@ mod arguments;
 mod call;
 mod reply;
 pub use call::HostCall;
+use herdr_process_application::Host;
 pub use herdr_process_application::{HostFailure, HostFailureCode, HostReply, OpenView};
 use reply::Expected;
 
@@ -13,17 +14,21 @@ pub struct Herdr {
     pub socket: PathBuf,
 }
 
-impl Herdr {
-    pub fn open(&self, view: &OpenView) -> anyhow::Result<HostCall> {
+impl Host for Herdr {
+    type Call = HostCall;
+
+    fn open(&self, view: &OpenView) -> anyhow::Result<HostCall> {
         let (arguments, expected) = arguments::open_arguments(view)?;
         self.call(arguments, expected)
     }
 
-    pub fn focus(&self, pane: &str) -> anyhow::Result<HostCall> {
+    fn focus(&self, pane: &str) -> anyhow::Result<HostCall> {
         let (arguments, expected) = arguments::focus_arguments(pane);
         self.call(arguments, expected)
     }
+}
 
+impl Herdr {
     fn call(&self, arguments: Vec<OsString>, expected: Expected) -> anyhow::Result<HostCall> {
         HostCall::spawn(self.command(arguments), expected, HOST_DEADLINE).map_err(Into::into)
     }

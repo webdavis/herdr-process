@@ -1,9 +1,10 @@
+use herdr_process_application::Screen;
 pub struct Terminal {
     parser: vt100::Parser<Responses>,
 }
 
-impl Terminal {
-    pub fn new(rows: u16, cols: u16) -> Self {
+impl Screen for Terminal {
+    fn new(rows: u16, cols: u16) -> Self {
         Self {
             parser: vt100::Parser::new_with_callbacks(
                 rows.max(1),
@@ -14,15 +15,15 @@ impl Terminal {
         }
     }
 
-    pub fn feed(&mut self, bytes: &[u8]) {
+    fn feed(&mut self, bytes: &[u8]) {
         self.parser.process(bytes);
     }
 
-    pub fn resize(&mut self, rows: u16, cols: u16) {
+    fn resize(&mut self, rows: u16, cols: u16) {
         self.parser.screen_mut().set_size(rows.max(1), cols.max(1));
     }
 
-    pub fn snapshot(&self) -> Vec<u8> {
+    fn snapshot(&self) -> Vec<u8> {
         let screen = self.parser.screen();
         // The attachment owns paste framing; child input modes are projected separately.
         let mut bytes =
@@ -53,7 +54,7 @@ impl Terminal {
         bytes
     }
 
-    pub fn take_responses(&mut self) -> Vec<u8> {
+    fn take_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.parser.callbacks_mut().bytes)
     }
 }

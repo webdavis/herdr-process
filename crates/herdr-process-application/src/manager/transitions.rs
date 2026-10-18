@@ -1,6 +1,4 @@
 use super::*;
-use adapters::{HostCall, HostReply, OpenView};
-use std::io::Read;
 mod actions;
 pub(super) struct Command {
     pub reply: Option<usize>,
@@ -8,20 +6,20 @@ pub(super) struct Command {
     pub action: Action,
     pub target: Target,
 }
-pub(super) struct Pending {
+pub(super) struct Pending<P: Ports> {
     pub command: Command,
     pub ticket: String,
     pub candidate: Option<usize>,
     pub ready: bool,
     pub dimensions: Option<(u16, u16)>,
-    pub call: Option<HostCall>,
+    pub call: Option<P::Call>,
     pub opened: Option<Placement>,
     pub intent: ViewIntent,
     pub deadline: Instant,
     pub waiting: Option<usize>,
     pub retry: Instant,
 }
-impl Manager {
+impl<P: Ports> Manager<P> {
     pub(super) fn poll_transition(&mut self) {
         let Some(mut pending) = self.pending.take() else {
             return;
@@ -44,13 +42,13 @@ impl Manager {
             }
         }
     }
-    fn advance(&mut self, pending: &mut Pending) -> anyhow::Result<bool> {
+    fn advance(&mut self, pending: &mut Pending<P>) -> anyhow::Result<bool> {
         anyhow::ensure!(
             self.sessions.contains_key(&pending.command.profile),
             "session exited during view replacement; retry to start again"
         );
         anyhow::ensure!(
-            Instant::now() < pending.deadline,
+            self.now < pending.deadline,
             "view replacement timed out; retry"
         );
         if let Some(id) = pending.candidate {
@@ -68,10 +66,10 @@ impl Manager {
             anyhow::bail!("retired attachment did not disconnect; retry");
         }
         if pending.call.is_none() && pending.opened.is_none() {
-            if Instant::now() < pending.retry {
+            if self.now < pending.retry {
                 return Ok(false);
             }
-            let profile = &self.configuration.profiles()[&pending.command.profile];
+            let profile = &self.settings.profiles[&pending.command.profile];
             let split = if let ViewIntent::OpenSplit(direction) = pending.intent {
                 Some((pending.command.target.clone(), direction))
             } else {
@@ -108,9 +106,9 @@ impl Manager {
                         self.retire(id);
                     }
                     pending.ready = false;
-                    pending.ticket = ticket()?;
+                    pending.ticket = self.tickets.issue();
                     pending.call = None;
-                    pending.retry = Instant::now() + Duration::from_millis(10);
+                    pending.retry = self.now + Duration::from_millis(10);
                     return Ok(false);
                 }
                 Err(error) => return Err(error.into()),
@@ -159,9 +157,4 @@ impl Manager {
             eprintln!("{message}");
         }
     }
-}
-fn ticket() -> anyhow::Result<String> {
-    let mut bytes = [0u8; 32];
-    std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }

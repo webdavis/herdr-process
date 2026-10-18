@@ -5,3 +5,5 @@ edition.workspace = true
 
 [dependencies]
 herdr-process-domain = { path = "../herdr-process-domain" }
+herdr-process-protocol = { path = "../herdr-process-protocol" }
+anyhow.workspace = true
